@@ -1,0 +1,23 @@
+# executables
+*.exe
+*.out
+*.o
+*.obj
+
+# temporary files
+*.log
+*.tmp
+
+# generated submission files
+submit.cpp
+solve_expand.cpp
+
+# debug folders
+debug/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editor local configs
+.vscode/*.code-workspace
