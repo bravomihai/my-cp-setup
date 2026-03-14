@@ -27,7 +27,7 @@ The following tools should be installed and available in `PATH`:
 ### Clone the repository
 
 ```bash
-git clone --recursive https://github.com/<user>/my-cp-setup.git
+git clone --recursive https://github.com/bravomihai/my-cp-setup.git
 cd my-cp-setup
 ```
 
