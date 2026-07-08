@@ -125,22 +125,31 @@ if not defined CP_PYTHON exit /b 1
 where javac >nul 2>nul || exit /b 1
 where g++ >nul 2>nul || exit /b 1
 
-"%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
+echo [VERIFY] Run C++ template
+"%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\cpp\solve.cpp" <nul >nul 2>nul
 if errorlevel 1 exit /b 1
-"%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\java\solve.java" >nul 2>nul
+echo [VERIFY] Run Java template
+"%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\java\solve.java" <nul >nul 2>nul
 if errorlevel 1 exit /b 1
-"%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\python\solve.py" >nul 2>nul
+echo [VERIFY] Run Python template
+"%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\python\solve.py" <nul >nul 2>nul
 if errorlevel 1 exit /b 1
+echo [VERIFY] Expand C++ template
 "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
 if errorlevel 1 exit /b 1
+echo [VERIFY] Expand Java template
 "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\java\solve.java" >nul 2>nul
 if errorlevel 1 exit /b 1
+echo [VERIFY] Expand Python template
 "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\python\solve.py" >nul 2>nul
 if errorlevel 1 exit /b 1
+echo [VERIFY] Compile expanded C++
 g++ -std=c++20 -O2 "%ROOT%\template\cpp\submit.cpp" -o "%TEMP%\cp_submit_test.exe"
 if errorlevel 1 exit /b 1
+echo [VERIFY] Compile expanded Java
 javac -encoding UTF-8 -d "%TEMP%" "%ROOT%\template\java\submit.java"
 if errorlevel 1 exit /b 1
+echo [VERIFY] Parse expanded Python
 "%CP_PYTHON%" -c "import ast, pathlib; ast.parse(pathlib.Path(r'%ROOT%\template\python\submit.py').read_text())"
 if errorlevel 1 exit /b 1
 
