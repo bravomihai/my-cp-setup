@@ -188,19 +188,22 @@ exit /b 1
 :install_msys2_toolchain
 call :require_winget
 if errorlevel 1 exit /b 1
-if "%VERBOSE%"=="1" (
-    echo [%ESC%[38;5;153mINSTALL%ESC%[0m] MSYS2 via winget: MSYS2.MSYS2
-    "%WINGET%" install --id MSYS2.MSYS2 %WINGET_ARGS%
-) else (
-    set "INSTALL_CMD=!WINGET! install --id MSYS2.MSYS2 %WINGET_QUIET_ARGS%"
-    call :run_install_spinner "MSYS2 via winget: MSYS2.MSYS2" "" "%TEMP%\cp_setup_winget.log"
-)
-set "INSTALL_EXIT=%ERRORLEVEL%"
 call :find_msys2_shell
 if errorlevel 1 (
-    echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for MSYS2.
-    if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
-    exit /b 1
+    if "%VERBOSE%"=="1" (
+        echo [%ESC%[38;5;153mINSTALL%ESC%[0m] MSYS2 via winget: MSYS2.MSYS2
+        "%WINGET%" install --id MSYS2.MSYS2 %WINGET_ARGS%
+    ) else (
+        set "INSTALL_CMD=!WINGET! install --id MSYS2.MSYS2 %WINGET_QUIET_ARGS%"
+        call :run_install_spinner "MSYS2 via winget: MSYS2.MSYS2" "" "%TEMP%\cp_setup_winget.log"
+    )
+    set "INSTALL_EXIT=%ERRORLEVEL%"
+    call :find_msys2_shell
+    if errorlevel 1 (
+        echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for MSYS2.
+        if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
+        exit /b 1
+    )
 )
 if "%VERBOSE%"=="1" (
     echo [%ESC%[38;5;153mINSTALL%ESC%[0m] MSYS2 toolchain via pacman
@@ -233,17 +236,22 @@ set "SPIN_PS=%TEMP%\cp_setup_pacman_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo if (-not $shell) { 'Could not find msys2_shell.cmd after installing MSYS2.' ^| Set-Content -LiteralPath $log; Write-Host ($install + ' ' + $label); exit 1 }
 >> "%SPIN_PS%" echo $bash = Join-Path (Split-Path -Parent $shell) 'usr\bin\bash.exe'
 >> "%SPIN_PS%" echo if (-not (Test-Path -LiteralPath $bash)) { 'Could not find MSYS2 bash.exe after installing MSYS2.' ^| Set-Content -LiteralPath $log; Write-Host ($install + ' ' + $label); exit 1 }
->> "%SPIN_PS%" echo $pacman = 'pacman -Syu --noconfirm ^^^&^^^& pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'
+>> "%SPIN_PS%" echo $pacman = 'pacman -Syu --noconfirm ^&^& pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'
 >> "%SPIN_PS%" echo $runLine = [string]('call ' + $q + $bash + $q + ' -lc ' + $q + $pacman + $q + ' 1^>' + $q + $log + $q + ' 2^>^&1')
 >> "%SPIN_PS%" echo $lines = @('@echo off','set "MSYSTEM=MINGW64"','set "CHERE_INVOKING=enabled_from_arguments"',$runLine,'exit /b %%ERRORLEVEL%%')
 >> "%SPIN_PS%" echo [IO.File]::WriteAllLines($wrapper, $lines)
->> "%SPIN_PS%" echo $p = Start-Process -FilePath $env:ComSpec -ArgumentList @('/d','/c','call ' + $q + $wrapper + $q) -PassThru -WindowStyle Hidden
+>> "%SPIN_PS%" echo $job = Start-Job -ScriptBlock { param($wrapper) ^& $env:ComSpec /d /c call $wrapper; $LASTEXITCODE } -ArgumentList $wrapper
 >> "%SPIN_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%SPIN_PS%" echo $i = 0
->> "%SPIN_PS%" echo while (-not $p.WaitForExit(100)) { Write-Host -NoNewline ($cr + $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label + ' (' + $hint + ')'); $i++ }
+>> "%SPIN_PS%" echo while ($job.State -eq 'Running') { Write-Host -NoNewline ($cr + $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label + ' (' + $hint + ')'); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
+>> "%SPIN_PS%" echo $jobResult = Receive-Job -Wait $job
+>> "%SPIN_PS%" echo Remove-Job $job -Force
+>> "%SPIN_PS%" echo $jobItems = @($jobResult)
+>> "%SPIN_PS%" echo if ($jobItems.Count -eq 0) { $exitCode = 1 } else { $exitCode = [int]$jobItems[-1] }
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue
->> "%SPIN_PS%" echo Write-Host ($cr + $install + ' ' + $label)
->> "%SPIN_PS%" echo exit $p.ExitCode
+>> "%SPIN_PS%" echo if ($exitCode -eq 0) { $result = 'OK' } else { $result = 'FAILED' }
+>> "%SPIN_PS%" echo Write-Host ($cr + $install + ' ' + $result + ' ' + $label + '     ')
+>> "%SPIN_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SPIN_PS%"
 set "SPIN_EXIT=%ERRORLEVEL%"
 del "%SPIN_PS%" >nul 2>nul
@@ -268,13 +276,18 @@ set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $runLine = [string]('call ' + $cmd + ' 1^>' + $q + $log + $q + ' 2^>^&1')
 >> "%SPIN_PS%" echo $lines = @('@echo off',$runLine,'exit /b %%ERRORLEVEL%%')
 >> "%SPIN_PS%" echo [IO.File]::WriteAllLines($wrapper, $lines)
->> "%SPIN_PS%" echo $p = Start-Process -FilePath $env:ComSpec -ArgumentList @('/d','/c','call ' + $q + $wrapper + $q) -PassThru -WindowStyle Hidden
+>> "%SPIN_PS%" echo $job = Start-Job -ScriptBlock { param($wrapper) ^& $env:ComSpec /d /c call $wrapper; $LASTEXITCODE } -ArgumentList $wrapper
 >> "%SPIN_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%SPIN_PS%" echo $i = 0
->> "%SPIN_PS%" echo while (-not $p.WaitForExit(100)) { $text = $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label; if ($hint) { $text += ' (' + $hint + ')' }; Write-Host -NoNewline ($cr + $text); $i++ }
+>> "%SPIN_PS%" echo while ($job.State -eq 'Running') { $text = $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label; if ($hint) { $text += ' (' + $hint + ')' }; Write-Host -NoNewline ($cr + $text); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
+>> "%SPIN_PS%" echo $jobResult = Receive-Job -Wait $job
+>> "%SPIN_PS%" echo Remove-Job $job -Force
+>> "%SPIN_PS%" echo $jobItems = @($jobResult)
+>> "%SPIN_PS%" echo if ($jobItems.Count -eq 0) { $exitCode = 1 } else { $exitCode = [int]$jobItems[-1] }
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue
->> "%SPIN_PS%" echo Write-Host ($cr + $install + ' ' + $label)
->> "%SPIN_PS%" echo exit $p.ExitCode
+>> "%SPIN_PS%" echo if ($exitCode -eq 0) { $result = 'OK' } else { $result = 'FAILED' }
+>> "%SPIN_PS%" echo Write-Host ($cr + $install + ' ' + $result + ' ' + $label + '     ')
+>> "%SPIN_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SPIN_PS%"
 set "SPIN_EXIT=%ERRORLEVEL%"
 del "%SPIN_PS%" >nul 2>nul
@@ -390,7 +403,7 @@ exit /b 1
 
 :ensure_spinner
 set "SPINNER_PY=%TEMP%\cp_setup_spinner_%RANDOM%_%RANDOM%.py"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$code=@('import argparse','import subprocess','import sys','import time','from pathlib import Path','','PURPLE = chr(27) + ''[38;5;183m''','RESET = chr(27) + ''[0m''','FRAMES = list(chr(92) + ''-/|'')','','def main() -> int:','    parser = argparse.ArgumentParser()','    parser.add_argument(''--label'', required=True)','    parser.add_argument(''--cwd'', default=str(Path.cwd()))','    parser.add_argument(''--stdin-empty'', action=''store_true'')','    parser.add_argument(''command'', nargs=argparse.REMAINDER)','    args = parser.parse_args()','    command = args.command[1:] if args.command and args.command[0] == ''--'' else args.command','    if not command:','        print(''spinner: missing command'', file=sys.stderr)','        return 1','    stdin = subprocess.DEVNULL if args.stdin_empty else None','    process = subprocess.Popen(command, cwd=args.cwd, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)','    index = 0','    while process.poll() is None:','        print(''\r[{}VERIFY{}] {} {}''.format(PURPLE, RESET, FRAMES[index %% len(FRAMES)], args.label), end='''', flush=True)','        time.sleep(0.1)','        index += 1','    stdout, stderr = process.communicate()','    if process.returncode == 0:','        print(''\r[{}VERIFY{}] {}''.format(PURPLE, RESET, args.label))','        return 0','    print(''\r[{}VERIFY{}] failed {}''.format(PURPLE, RESET, args.label), file=sys.stderr)','    if stderr:','        print(stderr, file=sys.stderr, end='''')','    if stdout:','        print(stdout, file=sys.stderr, end='''')','    return process.returncode','','if __name__ == ''__main__'':','    raise SystemExit(main())'); [IO.File]::WriteAllText('%SPINNER_PY%', ($code -join [Environment]::NewLine))"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$code=@('import argparse','import subprocess','import sys','import time','from pathlib import Path','','PURPLE = chr(27) + ''[38;5;183m''','RESET = chr(27) + ''[0m''','FRAMES = list(chr(92) + ''-/|'')','','def main() -> int:','    parser = argparse.ArgumentParser()','    parser.add_argument(''--label'', required=True)','    parser.add_argument(''--cwd'', default=str(Path.cwd()))','    parser.add_argument(''--stdin-empty'', action=''store_true'')','    parser.add_argument(''command'', nargs=argparse.REMAINDER)','    args = parser.parse_args()','    command = args.command[1:] if args.command and args.command[0] == ''--'' else args.command','    if not command:','        print(''spinner: missing command'', file=sys.stderr)','        return 1','    stdin = subprocess.DEVNULL if args.stdin_empty else None','    process = subprocess.Popen(command, cwd=args.cwd, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)','    index = 0','    while process.poll() is None:','        print(''\r[{}VERIFY{}] {} {}''.format(PURPLE, RESET, FRAMES[index %% len(FRAMES)], args.label), end='''', flush=True)','        time.sleep(0.1)','        index += 1','    stdout, stderr = process.communicate()','    if process.returncode == 0:','        print(''\r[{}VERIFY{}] OK {}     ''.format(PURPLE, RESET, args.label))','        return 0','    print(''\r[{}VERIFY{}] FAILED {}     ''.format(PURPLE, RESET, args.label), file=sys.stderr)','    if stderr:','        print(stderr, file=sys.stderr, end='''')','    if stdout:','        print(stdout, file=sys.stderr, end='''')','    return process.returncode','','if __name__ == ''__main__'':','    raise SystemExit(main())'); [IO.File]::WriteAllText('%SPINNER_PY%', ($code -join [Environment]::NewLine))"
 exit /b %ERRORLEVEL%
 
 :cleanup_verify
