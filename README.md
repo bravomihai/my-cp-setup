@@ -73,7 +73,8 @@ my-cp-setup
 |   |-- expand.py            Generate submit.cpp/submit.java/submit.py
 |   |-- install.bat          Windows installer
 |   |-- run.py               Run C++/Java/Python files
-|   `-- helpers/             Installer helper scripts
+|   `-- helpers/
+|       `-- install_support.ps1
 |-- template/
 |   |-- cpp/solve.cpp
 |   |-- java/solve.java
@@ -132,9 +133,7 @@ scripts\debug_cpp.bat template\cpp\solve.cpp
 
 Install macro loading:
 
-```bat
-scripts\helpers\install_cmd_macros.bat
-```
+Use `scripts\install.bat`; macro loading is part of the installer.
 
 New `cmd.exe` windows load these automatically after install.
 The `run` and `expand` macros use `CP_PYTHON`, so they do not depend on the `python.exe` Microsoft Store alias. See `cmd\cp_macros` for the current macro list.

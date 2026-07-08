@@ -30,9 +30,9 @@ if not errorlevel 1 (
 )
 
 if "%CHECK_ONLY%"=="1" (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\install_paths.ps1" -Root "%ROOT%" -Check
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\install_support.ps1" -Action paths -Root "%ROOT%" -Check
 ) else (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\install_paths.ps1" -Root "%ROOT%"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\install_support.ps1" -Action paths -Root "%ROOT%"
 )
 if errorlevel 1 goto failed
 call :refresh_path
@@ -59,7 +59,7 @@ if "%CHECK_ONLY%"=="0" (
     if errorlevel 1 goto failed
 
     set "CP_SETUP_ROOT=%ROOT%"
-    call "%ROOT%\scripts\helpers\install_cmd_macros.bat"
+    call :install_cmd_macros
     if errorlevel 1 goto failed
 ) else (
     echo [CHECK] Skipping environment writes and DOSKEY install.
@@ -106,8 +106,35 @@ if errorlevel 1 (
 )
 winget install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements
 if errorlevel 1 exit /b %ERRORLEVEL%
-powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\install_msys2_toolchain.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\install_support.ps1" -Action msys2
 exit /b %ERRORLEVEL%
+
+:install_cmd_macros
+set "MACROS=%ROOT%\cmd\cp_macros"
+if not exist "%MACROS%" (
+    echo Macro file not found: %MACROS%
+    exit /b 1
+)
+if not defined CP_PYTHON call :find_python
+if not defined CP_PYTHON (
+    echo Could not find a usable Python executable.
+    exit /b 1
+)
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('CP_SETUP_ROOT', '%ROOT%', 'User'); [Environment]::SetEnvironmentVariable('CP_PYTHON', '%CP_PYTHON%', 'User')"
+if errorlevel 1 exit /b 1
+set "CP_SETUP_ROOT=%ROOT%"
+del "%ROOT%\cmd\cmd_macros.local.txt" >nul 2>nul
+reg add "HKCU\Software\Microsoft\Command Processor" /v AutoRun /t REG_SZ /d "doskey /macrofile=\"%MACROS%\"" /f >nul
+if errorlevel 1 (
+    echo Failed to update cmd AutoRun.
+    exit /b 1
+)
+doskey /macrofile="%MACROS%"
+echo Installed DOSKEY macros from:
+echo %MACROS%
+echo.
+echo New cmd.exe windows will load them automatically.
+exit /b 0
 
 :refresh_path
 for /F "usebackq tokens=* delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"`) do set "PATH=%%P"
@@ -115,7 +142,7 @@ exit /b 0
 
 :find_python
 set "CP_PYTHON="
-for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\find_python.ps1"`) do set "CP_PYTHON=%%P"
+for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\install_support.ps1" -Action find-python`) do set "CP_PYTHON=%%P"
 if defined CP_PYTHON exit /b 0
 exit /b 1
 
@@ -127,24 +154,26 @@ if not defined CP_PYTHON call :find_python
 if not defined CP_PYTHON exit /b 1
 where javac >nul 2>nul || exit /b 1
 where g++ >nul 2>nul || exit /b 1
+call :ensure_spinner
+if errorlevel 1 exit /b 1
 
-"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Run C++ template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\cpp\solve.cpp"
+"%CP_PYTHON%" "%SPINNER_PY%" --label "Run C++ template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\cpp\solve.cpp"
 if errorlevel 1 goto verify_failed
-"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Run Java template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\java\solve.java"
+"%CP_PYTHON%" "%SPINNER_PY%" --label "Run Java template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\java\solve.java"
 if errorlevel 1 goto verify_failed
-"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Run Python template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\python\solve.py"
+"%CP_PYTHON%" "%SPINNER_PY%" --label "Run Python template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\python\solve.py"
 if errorlevel 1 goto verify_failed
-"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Expand C++ template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\cpp\solve.cpp"
+"%CP_PYTHON%" "%SPINNER_PY%" --label "Expand C++ template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\cpp\solve.cpp"
 if errorlevel 1 goto verify_failed
-"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Expand Java template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\java\solve.java"
+"%CP_PYTHON%" "%SPINNER_PY%" --label "Expand Java template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\java\solve.java"
 if errorlevel 1 goto verify_failed
-"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Expand Python template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\python\solve.py"
+"%CP_PYTHON%" "%SPINNER_PY%" --label "Expand Python template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\python\solve.py"
 if errorlevel 1 goto verify_failed
-"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Compile expanded C++" --cwd "%ROOT%" --stdin-empty -- g++ -std=c++20 -O2 "%ROOT%\template\cpp\submit.cpp" -o "%TEMP%\cp_submit_test.exe"
+"%CP_PYTHON%" "%SPINNER_PY%" --label "Compile expanded C++" --cwd "%ROOT%" --stdin-empty -- g++ -std=c++20 -O2 "%ROOT%\template\cpp\submit.cpp" -o "%TEMP%\cp_submit_test.exe"
 if errorlevel 1 goto verify_failed
-"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Compile expanded Java" --cwd "%ROOT%" --stdin-empty -- javac -encoding UTF-8 -d "%TEMP%" "%ROOT%\template\java\submit.java"
+"%CP_PYTHON%" "%SPINNER_PY%" --label "Compile expanded Java" --cwd "%ROOT%" --stdin-empty -- javac -encoding UTF-8 -d "%TEMP%" "%ROOT%\template\java\submit.java"
 if errorlevel 1 goto verify_failed
-"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Parse expanded Python" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" -c "import ast, pathlib; ast.parse(pathlib.Path(r'%ROOT%\template\python\submit.py').read_text())"
+"%CP_PYTHON%" "%SPINNER_PY%" --label "Parse expanded Python" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" -c "import ast, pathlib; ast.parse(pathlib.Path(r'%ROOT%\template\python\submit.py').read_text())"
 if errorlevel 1 goto verify_failed
 
 call :cleanup_verify
@@ -162,6 +191,11 @@ exit /b 0
 call :cleanup_verify
 exit /b 1
 
+:ensure_spinner
+set "SPINNER_PY=%TEMP%\cp_setup_spinner.py"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[IO.File]::WriteAllBytes('%SPINNER_PY%', [Convert]::FromBase64String('aW1wb3J0IGFyZ3BhcnNlCmltcG9ydCBzdWJwcm9jZXNzCmltcG9ydCBzeXMKaW1wb3J0IHRpbWUKZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpQVVJQTEUgPSAiXDAzM1szODs1OzE4M20iClJFU0VUID0gIlwwMzNbMG0iCkZSQU1FUyA9IFsiXFwiLCAiLSIsICIvIiwgInwiXQoKCmRlZiBtYWluKCkgLT4gaW50OgogICAgcGFyc2VyID0gYXJncGFyc2UuQXJndW1lbnRQYXJzZXIoKQogICAgcGFyc2VyLmFkZF9hcmd1bWVudCgiLS1sYWJlbCIsIHJlcXVpcmVkPVRydWUpCiAgICBwYXJzZXIuYWRkX2FyZ3VtZW50KCItLWN3ZCIsIGRlZmF1bHQ9c3RyKFBhdGguY3dkKCkpKQogICAgcGFyc2VyLmFkZF9hcmd1bWVudCgiLS1zdGRpbi1lbXB0eSIsIGFjdGlvbj0ic3RvcmVfdHJ1ZSIpCiAgICBwYXJzZXIuYWRkX2FyZ3VtZW50KCJjb21tYW5kIiwgbmFyZ3M9YXJncGFyc2UuUkVNQUlOREVSKQogICAgYXJncyA9IHBhcnNlci5wYXJzZV9hcmdzKCkKICAgIGNvbW1hbmQgPSBhcmdzLmNvbW1hbmRbMTpdIGlmIGFyZ3MuY29tbWFuZCBhbmQgYXJncy5jb21tYW5kWzBdID09ICItLSIgZWxzZSBhcmdzLmNvbW1hbmQKICAgIGlmIG5vdCBjb21tYW5kOgogICAgICAgIHByaW50KCJzcGlubmVyOiBtaXNzaW5nIGNvbW1hbmQiLCBmaWxlPXN5cy5zdGRlcnIpCiAgICAgICAgcmV0dXJuIDEKICAgIHN0ZGluID0gc3VicHJvY2Vzcy5ERVZOVUxMIGlmIGFyZ3Muc3RkaW5fZW1wdHkgZWxzZSBOb25lCiAgICBwcm9jZXNzID0gc3VicHJvY2Vzcy5Qb3Blbihjb21tYW5kLCBjd2Q9YXJncy5jd2QsIHN0ZGluPXN0ZGluLCBzdGRvdXQ9c3VicHJvY2Vzcy5QSVBFLCBzdGRlcnI9c3VicHJvY2Vzcy5QSVBFLCB0ZXh0PVRydWUpCiAgICBpbmRleCA9IDAKICAgIHdoaWxlIHByb2Nlc3MucG9sbCgpIGlzIE5vbmU6CiAgICAgICAgcHJpbnQoZiJcclt7UFVSUExFfVZFUklGWXtSRVNFVH1dIHtGUkFNRVNbaW5kZXggJSBsZW4oRlJBTUVTKV19IHthcmdzLmxhYmVsfSIsIGVuZD0iIiwgZmx1c2g9VHJ1ZSkKICAgICAgICB0aW1lLnNsZWVwKDAuMSkKICAgICAgICBpbmRleCArPSAxCiAgICBzdGRvdXQsIHN0ZGVyciA9IHByb2Nlc3MuY29tbXVuaWNhdGUoKQogICAgaWYgcHJvY2Vzcy5yZXR1cm5jb2RlID09IDA6CiAgICAgICAgcHJpbnQoZiJcclt7UFVSUExFfVZFUklGWXtSRVNFVH1dIGRvbmUge2FyZ3MubGFiZWx9IikKICAgICAgICByZXR1cm4gMAogICAgcHJpbnQoZiJcclt7UFVSUExFfVZFUklGWXtSRVNFVH1dIGZhaWxlZCB7YXJncy5sYWJlbH0iLCBmaWxlPXN5cy5zdGRlcnIpCiAgICBpZiBzdGRlcnI6CiAgICAgICAgcHJpbnQoc3RkZXJyLCBmaWxlPXN5cy5zdGRlcnIsIGVuZD0iIikKICAgIGlmIHN0ZG91dDoKICAgICAgICBwcmludChzdGRvdXQsIGZpbGU9c3lzLnN0ZGVyciwgZW5kPSIiKQogICAgcmV0dXJuIHByb2Nlc3MucmV0dXJuY29kZQoKCmlmIF9fbmFtZV9fID09ICJfX21haW5fXyI6CiAgICByYWlzZSBTeXN0ZW1FeGl0KG1haW4oKSkK'))"
+exit /b %ERRORLEVEL%
+
 :cleanup_verify
 del "%ROOT%\template\cpp\submit.cpp" >nul 2>nul
 del "%ROOT%\template\java\submit.java" >nul 2>nul
@@ -173,6 +207,7 @@ del "%TEMP%\Cp.class" >nul 2>nul
 del "%TEMP%\Cp$FastScanner.class" >nul 2>nul
 del "%TEMP%\Cp$Timer.class" >nul 2>nul
 del "%TEMP%\cp_submit_test.exe" >nul 2>nul
+del "%TEMP%\cp_setup_spinner.py" >nul 2>nul
 if exist "%ROOT%\libraries\python\my_libraries\__pycache__" rmdir /s /q "%ROOT%\libraries\python\my_libraries\__pycache__"
 if exist "%ROOT%\template\python\__pycache__" rmdir /s /q "%ROOT%\template\python\__pycache__"
 exit /b 0
