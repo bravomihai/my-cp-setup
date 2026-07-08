@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 
 for /F "tokens=1 delims=#" %%A in ('"prompt #$E# & echo on & for %%B in (1) do rem"') do set "ESC=%%A"
 for %%I in ("%~dp0..") do set "ROOT=%%~fI"
@@ -8,7 +8,6 @@ set "CHECK_ONLY=0"
 set "VERBOSE=0"
 set "WINGET_ARGS=--exact --source winget --accept-package-agreements --accept-source-agreements --disable-interactivity"
 set "WINGET_QUIET_ARGS=%WINGET_ARGS% --silent"
-set "FOUND_GPP_PRINTED=0"
 
 :parse_args
 if "%~1"=="" goto parsed_args
@@ -31,6 +30,8 @@ echo CP setup root:
 echo %ROOT%
 echo.
 
+call :refresh_path
+
 if "%CHECK_ONLY%"=="0" (
     call :install_paths
     if errorlevel 1 goto failed
@@ -45,7 +46,6 @@ if errorlevel 1 goto failed
 where g++ >nul 2>nul
 if not errorlevel 1 (
     call :print_found "g++"
-    set "FOUND_GPP_PRINTED=1"
 ) else (
     if "%CHECK_ONLY%"=="1" (
         echo [%ESC%[33mMISSING%ESC%[0m] g++
@@ -67,18 +67,14 @@ if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] g++ was installed, but g++.exe was not found in known MSYS2 paths.
     goto failed
 )
-if "%FOUND_GPP_PRINTED%"=="0" (
-    call :print_found "g++"
-    set "FOUND_GPP_PRINTED=1"
-)
 
 call :find_python
-if errorlevel 1 (
-    if "%CHECK_ONLY%"=="1" (
-        echo [%ESC%[33mMISSING%ESC%[0m] Python 3
-        goto failed
-    )
-
+if not errorlevel 1 (
+    call :print_found "Python"
+) else if "%CHECK_ONLY%"=="1" (
+    echo [%ESC%[33mMISSING%ESC%[0m] Python 3
+    goto failed
+) else (
     call :install_msys2_toolchain
     if errorlevel 1 goto failed
     call :refresh_path
@@ -88,7 +84,6 @@ if errorlevel 1 (
         goto failed
     )
 )
-call :print_found "Python"
 
 if "%CHECK_ONLY%"=="0" (
     powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('XDG_CONFIG_HOME', '%ROOT%', 'User')"
@@ -125,7 +120,6 @@ exit /b 0
 :need_or_install
 where "%~1" >nul 2>nul
 if not errorlevel 1 (
-    call :print_found "%~3"
     exit /b 0
 )
 
@@ -141,7 +135,7 @@ if "%VERBOSE%"=="1" (
     echo [%ESC%[38;5;153mINSTALL%ESC%[0m] %~3 via winget: %~2
     "%WINGET%" install --id %~2 %WINGET_ARGS%
 ) else (
-    set "INSTALL_CMD=""%WINGET%"" install --id %~2 %WINGET_QUIET_ARGS%"
+    set "INSTALL_CMD=!WINGET! install --id %~2 %WINGET_QUIET_ARGS%"
     call :run_install_spinner "%~3 via winget: %~2" "" "%TEMP%\cp_setup_winget.log"
 )
 set "INSTALL_EXIT=%ERRORLEVEL%"
@@ -150,7 +144,6 @@ if errorlevel 1 exit /b 1
 call :refresh_path
 where "%~1" >nul 2>nul
 if not errorlevel 1 (
-    call :print_found "%~3"
     exit /b 0
 )
 if not "%INSTALL_EXIT%"=="0" (
@@ -199,7 +192,7 @@ if "%VERBOSE%"=="1" (
     echo [%ESC%[38;5;153mINSTALL%ESC%[0m] MSYS2 via winget: MSYS2.MSYS2
     "%WINGET%" install --id MSYS2.MSYS2 %WINGET_ARGS%
 ) else (
-    set "INSTALL_CMD=""%WINGET%"" install --id MSYS2.MSYS2 %WINGET_QUIET_ARGS%"
+    set "INSTALL_CMD=!WINGET! install --id MSYS2.MSYS2 %WINGET_QUIET_ARGS%"
     call :run_install_spinner "MSYS2 via winget: MSYS2.MSYS2" "" "%TEMP%\cp_setup_winget.log"
 )
 set "INSTALL_EXIT=%ERRORLEVEL%"
@@ -211,7 +204,7 @@ if errorlevel 1 (
 )
 if "%VERBOSE%"=="1" (
     echo [%ESC%[38;5;153mINSTALL%ESC%[0m] MSYS2 toolchain via pacman
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; & $shell -mingw64 -no-start -here -c 'pacman -Syu --noconfirm'; if ($LASTEXITCODE -ne 0) { throw 'pacman system update failed.' }; & $shell -mingw64 -no-start -here -c 'pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; $bash=Join-Path (Split-Path -Parent $shell) 'usr\bin\bash.exe'; if (-not (Test-Path -LiteralPath $bash)) { throw 'Could not find MSYS2 bash.exe after installing MSYS2.' }; $env:MSYSTEM='MINGW64'; $env:CHERE_INVOKING='enabled_from_arguments'; & $bash -lc 'pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }"
 ) else (
     call :run_pacman_spinner
 )
@@ -223,15 +216,69 @@ if errorlevel 1 (
 exit /b %ERRORLEVEL%
 
 :run_pacman_spinner
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$label='MSYS2 toolchain via pacman'; $hint='this may take a while'; $log=$env:TEMP + '\cp_setup_pacman.log'; $err=$log + '.err'; $esc=[char]27; $cr=[char]13; $install='[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'; Remove-Item -LiteralPath $log,$err -ErrorAction SilentlyContinue; $shell=$null; foreach ($path in @('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd')) { if (Test-Path -LiteralPath $path) { $shell=$path; break } }; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { 'Could not find msys2_shell.cmd after installing MSYS2.' | Set-Content -LiteralPath $log; Write-Host ($install + ' ' + $label); exit 1 }; $args=@('-mingw64','-no-start','-here','-c','pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'); $p=Start-Process -FilePath $shell -ArgumentList $args -RedirectStandardOutput $log -RedirectStandardError $err -PassThru -WindowStyle Hidden; $frames=@([char]92,'-','/','|'); $i=0; while (-not $p.HasExited) { Write-Host -NoNewline ($cr + $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label + ' (' + $hint + ')'); Start-Sleep -Milliseconds 100; $i++ }; if (Test-Path -LiteralPath $err) { Get-Content -LiteralPath $err -ErrorAction SilentlyContinue | Add-Content -LiteralPath $log; Remove-Item -LiteralPath $err -ErrorAction SilentlyContinue }; Write-Host ($cr + $install + ' ' + $label); exit $p.ExitCode"
-exit /b %ERRORLEVEL%
+set "SPIN_PS=%TEMP%\cp_setup_pacman_spinner_%RANDOM%_%RANDOM%.ps1"
+> "%SPIN_PS%" echo $ErrorActionPreference = 'Stop'
+>> "%SPIN_PS%" echo $label = 'MSYS2 toolchain via pacman'
+>> "%SPIN_PS%" echo $hint = 'this may take a while'
+>> "%SPIN_PS%" echo $log = Join-Path $env:TEMP 'cp_setup_pacman.log'
+>> "%SPIN_PS%" echo $wrapper = Join-Path $env:TEMP ('cp_setup_pacman_' + [guid]::NewGuid().ToString('N') + '.cmd')
+>> "%SPIN_PS%" echo $q = [char]34
+>> "%SPIN_PS%" echo $esc = [char]27
+>> "%SPIN_PS%" echo $cr = [char]13
+>> "%SPIN_PS%" echo $install = '[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'
+>> "%SPIN_PS%" echo Remove-Item -LiteralPath $log,$wrapper -ErrorAction SilentlyContinue
+>> "%SPIN_PS%" echo $shell = $null
+>> "%SPIN_PS%" echo foreach ($path in @('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd')) { if (Test-Path -LiteralPath $path) { $shell = $path; break } }
+>> "%SPIN_PS%" echo if (-not $shell) { $cmd = Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell = $cmd.Source } }
+>> "%SPIN_PS%" echo if (-not $shell) { 'Could not find msys2_shell.cmd after installing MSYS2.' ^| Set-Content -LiteralPath $log; Write-Host ($install + ' ' + $label); exit 1 }
+>> "%SPIN_PS%" echo $bash = Join-Path (Split-Path -Parent $shell) 'usr\bin\bash.exe'
+>> "%SPIN_PS%" echo if (-not (Test-Path -LiteralPath $bash)) { 'Could not find MSYS2 bash.exe after installing MSYS2.' ^| Set-Content -LiteralPath $log; Write-Host ($install + ' ' + $label); exit 1 }
+>> "%SPIN_PS%" echo $pacman = 'pacman -Syu --noconfirm ^^^&^^^& pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'
+>> "%SPIN_PS%" echo $runLine = [string]('call ' + $q + $bash + $q + ' -lc ' + $q + $pacman + $q + ' 1^>' + $q + $log + $q + ' 2^>^&1')
+>> "%SPIN_PS%" echo $lines = @('@echo off','set "MSYSTEM=MINGW64"','set "CHERE_INVOKING=enabled_from_arguments"',$runLine,'exit /b %%ERRORLEVEL%%')
+>> "%SPIN_PS%" echo [IO.File]::WriteAllLines($wrapper, $lines)
+>> "%SPIN_PS%" echo $p = Start-Process -FilePath $env:ComSpec -ArgumentList @('/d','/c','call ' + $q + $wrapper + $q) -PassThru -WindowStyle Hidden
+>> "%SPIN_PS%" echo $frames = @([char]92,'-','/','^|')
+>> "%SPIN_PS%" echo $i = 0
+>> "%SPIN_PS%" echo while (-not $p.WaitForExit(100)) { Write-Host -NoNewline ($cr + $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label + ' (' + $hint + ')'); $i++ }
+>> "%SPIN_PS%" echo Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue
+>> "%SPIN_PS%" echo Write-Host ($cr + $install + ' ' + $label)
+>> "%SPIN_PS%" echo exit $p.ExitCode
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SPIN_PS%"
+set "SPIN_EXIT=%ERRORLEVEL%"
+del "%SPIN_PS%" >nul 2>nul
+exit /b %SPIN_EXIT%
 
 :run_install_spinner
 set "SPIN_LABEL=%~1"
 set "SPIN_HINT=%~2"
 set "SPIN_LOG=%~3"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$label=$env:SPIN_LABEL; $hint=$env:SPIN_HINT; $log=$env:SPIN_LOG; $cmd=$env:INSTALL_CMD; $err=$log + '.err'; $esc=[char]27; $cr=[char]13; $install='[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'; Remove-Item -LiteralPath $log,$err -ErrorAction SilentlyContinue; $p=Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/c',$cmd) -RedirectStandardOutput $log -RedirectStandardError $err -PassThru -WindowStyle Hidden; $frames=@([char]92,'-','/','|'); $i=0; while (-not $p.HasExited) { $text=$install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label; if ($hint) { $text += ' (' + $hint + ')' }; Write-Host -NoNewline ($cr + $text); Start-Sleep -Milliseconds 100; $i++ }; if (Test-Path -LiteralPath $err) { Get-Content -LiteralPath $err -ErrorAction SilentlyContinue | Add-Content -LiteralPath $log; Remove-Item -LiteralPath $err -ErrorAction SilentlyContinue }; Write-Host ($cr + $install + ' ' + $label); exit $p.ExitCode"
-exit /b %ERRORLEVEL%
+set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
+> "%SPIN_PS%" echo $ErrorActionPreference = 'Stop'
+>> "%SPIN_PS%" echo $label = $env:SPIN_LABEL
+>> "%SPIN_PS%" echo $hint = $env:SPIN_HINT
+>> "%SPIN_PS%" echo $log = $env:SPIN_LOG
+>> "%SPIN_PS%" echo $cmd = [string]$env:INSTALL_CMD
+>> "%SPIN_PS%" echo $wrapper = Join-Path $env:TEMP ('cp_setup_install_' + [guid]::NewGuid().ToString('N') + '.cmd')
+>> "%SPIN_PS%" echo $q = [char]34
+>> "%SPIN_PS%" echo $esc = [char]27
+>> "%SPIN_PS%" echo $cr = [char]13
+>> "%SPIN_PS%" echo $install = '[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'
+>> "%SPIN_PS%" echo Remove-Item -LiteralPath $log,$wrapper -ErrorAction SilentlyContinue
+>> "%SPIN_PS%" echo $runLine = [string]('call ' + $cmd + ' 1^>' + $q + $log + $q + ' 2^>^&1')
+>> "%SPIN_PS%" echo $lines = @('@echo off',$runLine,'exit /b %%ERRORLEVEL%%')
+>> "%SPIN_PS%" echo [IO.File]::WriteAllLines($wrapper, $lines)
+>> "%SPIN_PS%" echo $p = Start-Process -FilePath $env:ComSpec -ArgumentList @('/d','/c','call ' + $q + $wrapper + $q) -PassThru -WindowStyle Hidden
+>> "%SPIN_PS%" echo $frames = @([char]92,'-','/','^|')
+>> "%SPIN_PS%" echo $i = 0
+>> "%SPIN_PS%" echo while (-not $p.WaitForExit(100)) { $text = $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label; if ($hint) { $text += ' (' + $hint + ')' }; Write-Host -NoNewline ($cr + $text); $i++ }
+>> "%SPIN_PS%" echo Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue
+>> "%SPIN_PS%" echo Write-Host ($cr + $install + ' ' + $label)
+>> "%SPIN_PS%" echo exit $p.ExitCode
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SPIN_PS%"
+set "SPIN_EXIT=%ERRORLEVEL%"
+del "%SPIN_PS%" >nul 2>nul
+exit /b %SPIN_EXIT%
 
 :install_paths
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $check='%~1' -ieq 'check'; $verbose='%VERBOSE%' -eq '1'; $esc=[char]27; $jdkBins=@(); if (Test-Path -LiteralPath 'C:\Program Files\Eclipse Adoptium') { $jdkBins=Get-ChildItem -LiteralPath 'C:\Program Files\Eclipse Adoptium' -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'bin' } }; $c=@((Join-Path $root 'scripts'),'C:\Program Files\Git\cmd','C:\Program Files\Git\usr\bin','C:\Program Files\Git\mingw64\libexec\git-core','D:\software\programming\git\Git\cmd','D:\software\programming\git\Git\usr\bin','D:\software\programming\git\Git\mingw64\libexec\git-core','C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin') + $jdkBins; $e=$c | Where-Object { Test-Path -LiteralPath $_ }; if ($check) { if ($verbose) { foreach ($p in $e) { Write-Host \"[$($esc)[38;5;183mCHECK$($esc)[0m] PATH candidate exists: $p\" } } else { Write-Host \"[$($esc)[38;5;183mCHECK$($esc)[0m] Environment paths\" }; exit 0 }; $u=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $u) { $u='' }; $known=@($env:LOCALAPPDATA + '\Microsoft\WindowsApps') + $c; $known=$known | Where-Object { $_ } | Sort-Object Length -Descending -Unique; $parts=New-Object System.Collections.Generic.List[string]; foreach ($raw in ($u -split ';')) { $s=$raw.Trim(); while ($s) { $hit=$null; $hitAt=-1; foreach ($k in $known) { $i=$s.IndexOf($k, [StringComparison]::OrdinalIgnoreCase); if ($i -ge 0 -and ($hitAt -lt 0 -or $i -lt $hitAt -or ($i -eq $hitAt -and $k.Length -gt $hit.Length))) { $hit=$k; $hitAt=$i } }; if (-not $hit) { $parts.Add($s); break }; if ($hitAt -gt 0) { $prefix=$s.Substring(0,$hitAt).Trim(); if ($prefix) { $parts.Add($prefix) } }; $parts.Add($hit); $s=$s.Substring($hitAt + $hit.Length).Trim() } }; foreach ($p in $e) { $parts.Add($p) }; $clean=New-Object System.Collections.Generic.List[string]; foreach ($p in $parts) { $v=$p.Trim().TrimEnd('\'); if (-not $v) { continue }; $exists=$false; foreach ($x in $clean) { if ($x.TrimEnd('\') -ieq $v) { $exists=$true; break } }; if (-not $exists) { $clean.Add($v) } }; if ($verbose) { foreach ($p in $e) { Write-Host \"[PATH] Ensured: $p\" } }; [Environment]::SetEnvironmentVariable('Path',($clean -join ';'),'User')"
