@@ -3,6 +3,7 @@ import my_libraries.Cp;
 public class solve {
     static void solve() throws Exception {
         Cp.println("hello world!");
+        // Cp.out("debug", new int[] {1, 2, 3});
     }
 
     public static void main(String[] args) throws Exception {

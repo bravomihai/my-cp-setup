@@ -3,6 +3,7 @@ import time
 
 _tokens = iter(sys.stdin.buffer.read().split())
 _out = []
+DEBUG = True
 
 
 def token():
@@ -28,6 +29,11 @@ def flush():
 
 def eprint(*values, sep=" ", end="\n"):
     print(*values, sep=sep, end=end, file=sys.stderr)
+
+
+def out(*values, sep=" ", end="\n"):
+    if DEBUG:
+        eprint(*values, sep=sep, end=end)
 
 
 class Timer:

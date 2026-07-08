@@ -4,6 +4,7 @@ import java.io.*;
 import java.util.*;
 
 public final class Cp {
+    public static final boolean DEBUG = true;
     public static final FastScanner fs = new FastScanner(System.in);
     private static final StringBuilder out = new StringBuilder();
 
@@ -29,9 +30,28 @@ public final class Cp {
     public static void err(Object... values) {
         for (int i = 0; i < values.length; i++) {
             if (i > 0) System.err.print(' ');
-            System.err.print(values[i]);
+            System.err.print(format(values[i]));
         }
         System.err.println();
+    }
+
+    public static void out(Object... values) {
+        if (DEBUG) err(values);
+    }
+
+    private static String format(Object value) {
+        if (value == null) return "null";
+        Class<?> cls = value.getClass();
+        if (!cls.isArray()) return String.valueOf(value);
+        if (value instanceof Object[]) return Arrays.deepToString((Object[])value);
+
+        int n = java.lang.reflect.Array.getLength(value);
+        StringBuilder s = new StringBuilder("[");
+        for (int i = 0; i < n; i++) {
+            if (i > 0) s.append(", ");
+            s.append(java.lang.reflect.Array.get(value, i));
+        }
+        return s.append(']').toString();
     }
 
     public static final class Timer {

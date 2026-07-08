@@ -87,6 +87,7 @@ def expand_java(source: Path, root: Path) -> Path:
 
     lib_text = re.sub(r"(?m)^package\s+my_libraries;\s*\n?", "", lib_text)
     lib_text = re.sub(r"\bpublic\s+final\s+class\s+Cp\b", "final class Cp", lib_text)
+    lib_text = re.sub(r"\bpublic\s+static\s+final\s+boolean\s+DEBUG\s*=\s*true\s*;", "public static final boolean DEBUG = false;", lib_text)
     src_text = re.sub(r"(?m)^import\s+my_libraries\.Cp;\s*\n?", "", src_text)
     src_text = re.sub(r"(?m)^import\s+static\s+my_libraries\.Cp\.\*;\s*\n?", "", src_text)
     src_text = re.sub(r"\bpublic\s+class\s+solve\b", "class solve", src_text)
@@ -104,6 +105,7 @@ def expand_python(source: Path, root: Path) -> Path:
 
     lib_text = lib.read_text(encoding="utf-8")
     src_text = source.read_text(encoding="utf-8")
+    lib_text = re.sub(r"(?m)^DEBUG\s*=\s*True\s*$", "DEBUG = False", lib_text)
     src_text = re.sub(r"(?m)^from\s+my_libraries\.cp\s+import\s+\*\s*\n?", "", src_text)
 
     out = source.parent / "submit.py"

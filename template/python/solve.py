@@ -3,6 +3,7 @@ from my_libraries.cp import *
 
 def solve():
     print_("hello world!")
+    # out("debug", [1, 2, 3])
 
 
 def main():
