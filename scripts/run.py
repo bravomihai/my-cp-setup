@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from subprocess import list2cmdline
 
 
 GREEN = "\033[32m"
@@ -19,6 +20,20 @@ def done() -> None:
 
 def failed(label: str) -> None:
     print(f"[{RED}{label}{RESET}]", file=sys.stderr)
+
+
+def open_new_cmd(source: Path) -> int:
+    if os.name != "nt":
+        print("--new-cmd is only supported on Windows.", file=sys.stderr)
+        return 1
+
+    command = [
+        "cmd",
+        "/k",
+        f'cd /d "{source.parent}" && {list2cmdline([sys.executable, str(Path(__file__).resolve()), str(source)])}',
+    ]
+    subprocess.Popen(["cmd", "/c", "start", "", *command])
+    return 0
 
 
 def selected_input(source: Path) -> Path | None:
@@ -113,6 +128,7 @@ def run_python(source: Path, root: Path, input_path: Path | None) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Compile and run CP source files.")
+    parser.add_argument("--new-cmd", action="store_true", help="Open a new cmd.exe window and run there.")
     parser.add_argument("source", help="Path to a .cpp, .java, or .py file")
     args = parser.parse_args()
 
@@ -122,6 +138,9 @@ def main() -> int:
     if not source.exists():
         print(f"File not found: {source}", file=sys.stderr)
         return 1
+
+    if args.new_cmd:
+        return open_new_cmd(source)
 
     input_path = selected_input(source)
     suffix = source.suffix.lower()

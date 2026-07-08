@@ -15,11 +15,7 @@ vim.keymap.set("n", "<leader>r", function()
   vim.cmd("w")
   local file = vim.fn.expand("%:p")
   local runner = scripts_dir .. "run.py"
-  local out = vim.fn.system({ python, runner, file })
-
-  if vim.v.shell_error ~= 0 then
-    vim.notify(vim.trim(out), vim.log.levels.ERROR)
-  end
+  vim.fn.system({ python, runner, "--new-cmd", file })
 end, { desc = "Run current file" })
 
 -- expand for submission
