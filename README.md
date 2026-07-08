@@ -69,7 +69,7 @@ my-cp-setup
 |-- scripts/
 |   |-- build_run.bat        Run C++/Java/Python files
 |   |-- debug_cpp.bat        Compile C++ with debug symbols and run gdb
-|   |-- expand_cpp.bat       Generate submit.cpp
+|   |-- expand.py            Generate submit.cpp/submit.java/submit.py
 |   |-- install.bat          Windows installer
 |   |-- install_cmd_macros.bat
 |   `-- install_paths.ps1
@@ -103,16 +103,20 @@ scripts\build_run.bat template\python\solve.py
 
 ## Expand C++
 
-Generate a standalone `submit.cpp` and copy it to the clipboard:
+Generate a standalone submit file and copy it to the clipboard:
 
 ```bat
-scripts\expand_cpp.bat template\cpp\solve.cpp
+python scripts\expand.py template\cpp\solve.cpp
+python scripts\expand.py template\java\solve.java
+python scripts\expand.py template\python\solve.py
 ```
 
-On success it prints:
+On success it prints one of:
 
 ```text
 [DONE] submit.cpp generated
+[DONE] submit.java generated
+[DONE] submit.py generated
 ```
 
 Only `DONE` is green. On failure it prints an `EXPAND FAILED` message.

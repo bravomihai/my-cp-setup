@@ -125,16 +125,31 @@ cmd /d /c call "%ROOT%\scripts\build_run.bat" __run "%ROOT%\template\java\solve.
 if errorlevel 1 exit /b 1
 cmd /d /c call "%ROOT%\scripts\build_run.bat" __run "%ROOT%\template\python\solve.py" >nul 2>nul
 if errorlevel 1 exit /b 1
-cmd /d /c call "%ROOT%\scripts\expand_cpp.bat" "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
+python "%ROOT%\scripts\expand.py" "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
+if errorlevel 1 exit /b 1
+python "%ROOT%\scripts\expand.py" "%ROOT%\template\java\solve.java" >nul 2>nul
+if errorlevel 1 exit /b 1
+python "%ROOT%\scripts\expand.py" "%ROOT%\template\python\solve.py" >nul 2>nul
 if errorlevel 1 exit /b 1
 g++ -std=c++20 -O2 "%ROOT%\template\cpp\submit.cpp" -o "%TEMP%\cp_submit_test.exe"
 if errorlevel 1 exit /b 1
+javac -encoding UTF-8 -d "%TEMP%" "%ROOT%\template\java\submit.java"
+if errorlevel 1 exit /b 1
+python -c "import ast, pathlib; ast.parse(pathlib.Path(r'%ROOT%\template\python\submit.py').read_text())"
+if errorlevel 1 exit /b 1
 
 del "%ROOT%\template\cpp\submit.cpp" >nul 2>nul
+del "%ROOT%\template\java\submit.java" >nul 2>nul
+del "%ROOT%\template\python\submit.py" >nul 2>nul
 del "%ROOT%\template\cpp\solve.exe" >nul 2>nul
 del "%ROOT%\template\java\solve.class" >nul 2>nul
+del "%TEMP%\solve.class" >nul 2>nul
+del "%TEMP%\Cp.class" >nul 2>nul
+del "%TEMP%\Cp$FastScanner.class" >nul 2>nul
+del "%TEMP%\Cp$Timer.class" >nul 2>nul
 del "%TEMP%\cp_submit_test.exe" >nul 2>nul
 if exist "%ROOT%\libraries\python\my_libraries\__pycache__" rmdir /s /q "%ROOT%\libraries\python\my_libraries\__pycache__"
+if exist "%ROOT%\template\python\__pycache__" rmdir /s /q "%ROOT%\template\python\__pycache__"
 
 if exist "%ROOT%\.git" (
     git -C "%ROOT%" submodule status >nul

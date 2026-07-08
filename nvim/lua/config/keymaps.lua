@@ -18,20 +18,27 @@ vim.keymap.set("n", "<leader>r", function()
   end
 end, { desc = "Run current file" })
 
--- expand cpp
+-- expand for submission
 vim.keymap.set("n", "<leader>e", function()
   vim.cmd("w")
   local file = vim.fn.expand("%:p")
   local ext = vim.fn.expand("%:e")
 
-  if ext ~= "cpp" then
-    vim.notify("Expand is only configured for .cpp files", vim.log.levels.WARN)
+  if ext ~= "cpp" and ext ~= "java" and ext ~= "py" then
+    vim.notify("Expand supports only .cpp, .java, and .py files", vim.log.levels.WARN)
     return
   end
 
-  vim.fn.system('expand_cpp.bat "' .. file .. '"')
-  vim.notify("submit.cpp generated")
-end, { desc = "Expand C++" })
+  local expander = "D:\\coding\\cp\\scripts\\expand.py"
+  local out = vim.fn.system({ "python", expander, file })
+
+  if vim.v.shell_error ~= 0 then
+    vim.notify(vim.trim(out), vim.log.levels.ERROR)
+    return
+  end
+
+  vim.notify(vim.trim(out))
+end, { desc = "Expand for submission" })
 
 -- debug
 vim.keymap.set("n", "<leader>d", function()

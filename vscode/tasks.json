@@ -15,8 +15,8 @@
     {
       "label": "Expand",
       "type": "shell",
-      "command": "expand_cpp.bat",
-      "args": ["${file}"]
+      "command": "python",
+      "args": ["${workspaceFolder}/scripts/expand.py", "${file}"]
     },
     {
       "label": "Build (Debug)",

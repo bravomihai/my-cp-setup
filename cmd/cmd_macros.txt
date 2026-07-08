@@ -5,5 +5,5 @@ solve_java=nvim D:\coding\cp\template\java\solve.java
 solve_py=nvim D:\coding\cp\template\python\solve.py
 input=cd /d D:\coding\cp && nvim input.txt
 run=D:\coding\cp\scripts\build_run.bat $*
-expand=D:\coding\cp\scripts\expand_cpp.bat $*
+expand=python D:\coding\cp\scripts\expand.py $*
 debug=D:\coding\cp\scripts\debug_cpp.bat $*
