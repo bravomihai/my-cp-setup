@@ -36,6 +36,12 @@ if "%CHECK_ONLY%"=="1" (
 )
 if errorlevel 1 goto failed
 call :refresh_path
+call :find_gpp
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] g++ was installed, but g++.exe was not found in known MSYS2 paths.
+    goto failed
+)
+echo [%ESC%[32mOK%ESC%[0m] g++ found: %CP_GPP%
 
 call :find_python
 if errorlevel 1 (
@@ -56,6 +62,8 @@ if "%CHECK_ONLY%"=="0" (
     powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('CP_SETUP_ROOT', '%ROOT%', 'User')"
     if errorlevel 1 goto failed
     powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('CP_PYTHON', '%CP_PYTHON%', 'User')"
+    if errorlevel 1 goto failed
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('CP_GPP', '%CP_GPP%', 'User')"
     if errorlevel 1 goto failed
 
     set "CP_SETUP_ROOT=%ROOT%"
@@ -149,8 +157,22 @@ for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass
 if defined CP_PYTHON exit /b 0
 exit /b 1
 
+:find_gpp
+set "CP_GPP="
+for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=@(); if ($env:CP_GPP) { $c += $env:CP_GPP }; $c += @('C:\msys64\mingw64\bin\g++.exe','C:\msys64\ucrt64\bin\g++.exe','D:\software\programming\msys2\mingw64\bin\g++.exe','D:\software\programming\msys2\ucrt64\bin\g++.exe'); $w=where.exe g++ 2>$null; if ($LASTEXITCODE -eq 0) { $c += $w }; foreach ($p in $c) { if ($p -and (Test-Path -LiteralPath $p)) { & $p --version *> $null; if ($LASTEXITCODE -eq 0) { Write-Output $p; exit 0 } } }; exit 1"`) do set "CP_GPP=%%P"
+if defined CP_GPP (
+    for %%I in ("%CP_GPP%") do set "PATH=%%~dpI;%PATH%"
+    exit /b 0
+)
+exit /b 1
+
 :verify
 call :refresh_path
+call :find_gpp
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] g++ is not visible during verification.
+    exit /b 1
+)
 where git >nul 2>nul
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] git is not visible during verification.
@@ -171,11 +193,6 @@ if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] javac is not visible during verification.
     exit /b 1
 )
-where g++ >nul 2>nul
-if errorlevel 1 (
-    echo [%ESC%[31mFAILED%ESC%[0m] g++ is not visible during verification.
-    exit /b 1
-)
 call :ensure_spinner
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] Could not create verification spinner.
@@ -194,7 +211,7 @@ if errorlevel 1 goto verify_failed
 if errorlevel 1 goto verify_failed
 "%CP_PYTHON%" "%SPINNER_PY%" --label "Expand Python template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\python\solve.py"
 if errorlevel 1 goto verify_failed
-"%CP_PYTHON%" "%SPINNER_PY%" --label "Compile expanded C++" --cwd "%ROOT%" --stdin-empty -- g++ -std=c++20 -O2 "%ROOT%\template\cpp\submit.cpp" -o "%TEMP%\cp_submit_test.exe"
+"%CP_PYTHON%" "%SPINNER_PY%" --label "Compile expanded C++" --cwd "%ROOT%" --stdin-empty -- "%CP_GPP%" -std=c++20 -O2 "%ROOT%\template\cpp\submit.cpp" -o "%TEMP%\cp_submit_test.exe"
 if errorlevel 1 goto verify_failed
 "%CP_PYTHON%" "%SPINNER_PY%" --label "Compile expanded Java" --cwd "%ROOT%" --stdin-empty -- javac -encoding UTF-8 -d "%TEMP%" "%ROOT%\template\java\submit.java"
 if errorlevel 1 goto verify_failed

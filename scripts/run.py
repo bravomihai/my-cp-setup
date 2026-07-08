@@ -41,8 +41,9 @@ def run_command(command: list[str], cwd: Path, input_path: Path | None = None, e
 
 def run_cpp(source: Path, root: Path, input_path: Path | None) -> int:
     exe = source.with_suffix(".exe")
+    compiler = os.environ.get("CP_GPP") or "g++"
     compile_cmd = [
-        "g++",
+        compiler,
         "-std=c++20",
         "-O2",
         f"-I{root / 'libraries' / 'cpp'}",
