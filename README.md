@@ -39,7 +39,7 @@ If a tool is missing, it tries to install it with `winget`. For C++ and Python, 
 
 The installer also:
 
-- adds known tool directories to the user `Path`
+- adds and normalizes known tool directories in the user `Path`
 - sets `XDG_CONFIG_HOME` to the repository root
 - sets `CP_SETUP_ROOT` to the repository root
 - sets `CP_PYTHON` to the real Python executable used by the setup
@@ -97,6 +97,8 @@ Examples:
 "%CP_PYTHON%" scripts\run.py template\java\solve.java
 "%CP_PYTHON%" scripts\run.py template\python\solve.py
 ```
+
+From Neovim, `<leader>r` calls `scripts\run.py --new-cmd` and opens the result in a new `cmd.exe` window.
 
 ## Expand
 

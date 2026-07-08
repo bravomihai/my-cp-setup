@@ -3,19 +3,17 @@ from my_libraries.cp import *
 
 def solve():
     print_("hello world!")
-    # out("debug", [1, 2, 3])
 
 
 def main():
     timer = Timer()
 
-    tc = 1
-    # tc = ni()
+    tc = 1  # tc = ni()
     for _ in range(tc):
         solve()
 
     flush()
-    eprint(f"{timer.elapsed():.6f}s")
+    out(f"{timer.elapsed():.6f}s")
 
 
 if __name__ == "__main__":
