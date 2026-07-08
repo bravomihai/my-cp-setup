@@ -4,6 +4,8 @@ CompileFlags:
     - -I.
     - -Ilibraries/ac-library
     - -Ilibraries/cpp
+    - -I../../libraries/ac-library
+    - -I../../libraries/cpp
 
 Clangd:
   QueryDriver: D:/software/programming/msys2/mingw64/bin/g++.exe
