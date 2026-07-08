@@ -19,8 +19,24 @@ call :need_or_install python Python.Python.3.12 "Python 3"
 if errorlevel 1 goto failed
 call :need_or_install javac EclipseAdoptium.Temurin.21.JDK "JDK"
 if errorlevel 1 goto failed
-call :need_gpp
-if errorlevel 1 goto failed
+
+where g++ >nul 2>nul
+if not errorlevel 1 (
+    echo [%ESC%[32mOK%ESC%[0m] g++ found
+) else (
+    echo [%ESC%[33mMISSING%ESC%[0m] g++
+    if "%CHECK_ONLY%"=="0" (
+        where winget >nul 2>nul
+        if errorlevel 1 (
+            echo [%ESC%[31mFAILED%ESC%[0m] winget is required to install MSYS2 automatically.
+            goto failed
+        )
+        winget install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements
+        if errorlevel 1 goto failed
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\install_msys2_toolchain.ps1"
+        if errorlevel 1 goto failed
+    )
+)
 
 if "%CHECK_ONLY%"=="1" (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\install_paths.ps1" -Root "%ROOT%" -Check
@@ -71,41 +87,6 @@ if errorlevel 1 (
 
 winget install --id %~2 --exact --accept-package-agreements --accept-source-agreements
 exit /b %ERRORLEVEL%
-
-:need_gpp
-where g++ >nul 2>nul
-if not errorlevel 1 (
-    echo [%ESC%[32mOK%ESC%[0m] g++ found
-    exit /b 0
-)
-
-echo [%ESC%[33mMISSING%ESC%[0m] g++
-if "%CHECK_ONLY%"=="1" exit /b 0
-
-where winget >nul 2>nul
-if errorlevel 1 (
-    echo [%ESC%[31mFAILED%ESC%[0m] winget is required to install MSYS2 automatically.
-    exit /b 1
-)
-
-winget install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements
-if errorlevel 1 exit /b 1
-
-call :refresh_path
-call :find_msys2_shell
-if not defined MSYS2_SHELL (
-    echo [%ESC%[31mFAILED%ESC%[0m] Could not find msys2_shell.cmd after installing MSYS2.
-    exit /b 1
-)
-
-"%MSYS2_SHELL%" -mingw64 -defterm -no-start -here -c "pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra"
-exit /b %ERRORLEVEL%
-
-:find_msys2_shell
-set "MSYS2_SHELL="
-if exist "C:\msys64\msys2_shell.cmd" set "MSYS2_SHELL=C:\msys64\msys2_shell.cmd"
-if exist "D:\software\programming\msys2\msys2_shell.cmd" set "MSYS2_SHELL=D:\software\programming\msys2\msys2_shell.cmd"
-exit /b 0
 
 :refresh_path
 for /F "usebackq tokens=* delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"`) do set "PATH=%%P"
