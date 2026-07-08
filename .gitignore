@@ -21,7 +21,6 @@ solve_expand.cpp
 /other.cpp
 /debug.cpp
 /bibliography/
-/cloudeflight_coding_contest/
 
 # debug folders
 debug/
@@ -31,6 +30,4 @@ debug/
 Thumbs.db
 
 # editor local configs
-.vscode/*.code-workspace
-/.vscode/
 /.clangd

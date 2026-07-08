@@ -241,16 +241,6 @@ void out(const T &...args) {
      ...);
     cerr << '\n';
 }
-// redirect input/output cloudeflight_coding_contest
-void IO(int lvl, int input) {
-    string base_in = "D:\\studying\\comp_prog\\cloudeflight_coding_contest\\inputs\\level";
-    string base_out = "D:\\studying\\comp_prog\\cloudeflight_coding_contest\\outputs\\level";
-    string sin = base_in + to_string(lvl) + "_" + to_string(input) + ".in";
-    string sout = base_out + to_string(lvl) + "_" + to_string(input) + ".out";
-    freopen(sin.c_str(), "r", stdin);
-    freopen(sout.c_str(), "w", stdout);
-}
-
 // redirect input/output general
 void IO() {
     freopen("D:\\studying\\comp_prog\\debug\\input.txt", "r", stdin);

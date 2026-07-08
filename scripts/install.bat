@@ -30,9 +30,9 @@ if not errorlevel 1 (
 )
 
 if "%CHECK_ONLY%"=="1" (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\install_support.ps1" -Action paths -Root "%ROOT%" -Check
+    call :install_paths check
 ) else (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\install_support.ps1" -Action paths -Root "%ROOT%"
+    call :install_paths
 )
 if errorlevel 1 goto failed
 call :refresh_path
@@ -62,7 +62,7 @@ if "%CHECK_ONLY%"=="0" (
     call :install_cmd_macros
     if errorlevel 1 goto failed
 ) else (
-    echo [CHECK] Skipping environment writes and DOSKEY install.
+    echo [%ESC%[38;5;183mCHECK%ESC%[0m] Skipping environment writes and DOSKEY install.
 )
 
 if exist "%ROOT%\.git" (
@@ -106,11 +106,15 @@ if errorlevel 1 (
 )
 winget install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements
 if errorlevel 1 exit /b %ERRORLEVEL%
-powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\install_support.ps1" -Action msys2
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -Syu --noconfirm'; if ($LASTEXITCODE -ne 0) { throw 'pacman system update failed.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }"
+exit /b %ERRORLEVEL%
+
+:install_paths
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $check='%~1' -ieq 'check'; $esc=[char]27; $c=@((Join-Path $root 'scripts'),'C:\Program Files\Git\cmd','C:\Program Files\Git\usr\bin','C:\Program Files\Git\mingw64\libexec\git-core','D:\software\programming\git\Git\cmd','D:\software\programming\git\Git\usr\bin','D:\software\programming\git\Git\mingw64\libexec\git-core','C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin'); $e=$c | Where-Object { Test-Path -LiteralPath $_ }; if ($check) { foreach ($p in $e) { Write-Host \"[$($esc)[38;5;183mCHECK$($esc)[0m] PATH candidate exists: $p\" }; exit 0 }; $u=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $u) { $u='' }; $parts=$u -split ';' | Where-Object { $_ }; foreach ($p in $e) { $a=$parts | Where-Object { $_.TrimEnd('\') -ieq $p.TrimEnd('\') }; if (-not $a) { $parts += $p; Write-Host \"[PATH] Added: $p\" } }; [Environment]::SetEnvironmentVariable('Path',($parts -join ';'),'User')"
 exit /b %ERRORLEVEL%
 
 :install_cmd_macros
-set "MACROS=%ROOT%\cmd\cp_macros"
+set "MACROS=%ROOT%\scripts\cp_macros"
 if not exist "%MACROS%" (
     echo Macro file not found: %MACROS%
     exit /b 1
@@ -123,7 +127,6 @@ if not defined CP_PYTHON (
 powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('CP_SETUP_ROOT', '%ROOT%', 'User'); [Environment]::SetEnvironmentVariable('CP_PYTHON', '%CP_PYTHON%', 'User')"
 if errorlevel 1 exit /b 1
 set "CP_SETUP_ROOT=%ROOT%"
-del "%ROOT%\cmd\cmd_macros.local.txt" >nul 2>nul
 reg add "HKCU\Software\Microsoft\Command Processor" /v AutoRun /t REG_SZ /d "doskey /macrofile=\"%MACROS%\"" /f >nul
 if errorlevel 1 (
     echo Failed to update cmd AutoRun.
@@ -142,7 +145,7 @@ exit /b 0
 
 :find_python
 set "CP_PYTHON="
-for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\install_support.ps1" -Action find-python`) do set "CP_PYTHON=%%P"
+for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=@(); if ($env:CP_PYTHON) { $c += $env:CP_PYTHON }; $c += @('C:\msys64\mingw64\bin\python.exe','C:\msys64\ucrt64\bin\python.exe','D:\software\programming\msys2\mingw64\bin\python.exe','D:\software\programming\msys2\ucrt64\bin\python.exe'); $w=where.exe python 2>$null; if ($LASTEXITCODE -eq 0) { $c += $w }; $py=Get-Command py.exe -ErrorAction SilentlyContinue; if ($py) { $p=& $py.Source -3 -c 'import sys; print(sys.executable)' 2>$null; if ($LASTEXITCODE -eq 0) { $c += $p } }; foreach ($p in $c) { if ($p -and $p -notlike '*\Microsoft\WindowsApps\*' -and (Test-Path -LiteralPath $p)) { & $p --version *> $null; if ($LASTEXITCODE -eq 0) { Write-Output $p; exit 0 } } }; exit 1"`) do set "CP_PYTHON=%%P"
 if defined CP_PYTHON exit /b 0
 exit /b 1
 

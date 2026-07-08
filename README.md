@@ -1,6 +1,6 @@
 # my-cp-setup
 
-Personal competitive programming setup for Windows 11, with C++, Java, Python, Neovim, VS Code tasks, DOSKEY macros, and AtCoder Library expansion.
+Personal competitive programming setup for Windows 11, with C++, Java, Python, Neovim, DOSKEY macros, and AtCoder Library expansion.
 
 ## Quick Install
 
@@ -43,7 +43,7 @@ The installer also:
 - sets `XDG_CONFIG_HOME` to the repository root
 - sets `CP_SETUP_ROOT` to the repository root
 - sets `CP_PYTHON` to the real Python executable used by the setup
-- configures CMD DOSKEY macros from `cmd\cp_macros`
+- configures CMD DOSKEY macros from `scripts\cp_macros`
 - initializes the `ac-library` submodule
 - verifies C++, Java, Python, and expansion for all three languages
 
@@ -54,8 +54,6 @@ External tools are not stored in this repository.
 ```text
 my-cp-setup
 |-- ac-library/              AtCoder Library submodule
-|-- cmd/
-|   `-- cp_macros            CMD DOSKEY macros
 |-- libraries/
 |   |-- cpp/
 |   |   `-- my_libraries/
@@ -69,17 +67,15 @@ my-cp-setup
 |           `-- cp.py        Python helpers
 |-- nvim/                    Neovim configuration
 |-- scripts/
+|   |-- cp_macros            CMD DOSKEY macros
 |   |-- debug_cpp.bat        Compile C++ with debug symbols and run gdb
 |   |-- expand.py            Generate submit.cpp/submit.java/submit.py
 |   |-- install.bat          Windows installer
-|   |-- run.py               Run C++/Java/Python files
-|   `-- helpers/
-|       `-- install_support.ps1
+|   `-- run.py               Run C++/Java/Python files
 |-- template/
 |   |-- cpp/solve.cpp
 |   |-- java/solve.java
 |   `-- python/solve.py
-|-- vscode/                  VS Code tasks/settings
 |-- .clang-format
 |-- .gitignore
 |-- .gitmodules
@@ -136,7 +132,7 @@ Install macro loading:
 Use `scripts\install.bat`; macro loading is part of the installer.
 
 New `cmd.exe` windows load these automatically after install.
-The `run` and `expand` macros use `CP_PYTHON`, so they do not depend on the `python.exe` Microsoft Store alias. See `cmd\cp_macros` for the current macro list.
+The `run` and `expand` macros use `CP_PYTHON`, so they do not depend on the `python.exe` Microsoft Store alias. See `scripts\cp_macros` for the current macro list.
 
 ## Neovim
 
@@ -151,10 +147,6 @@ Neovim then loads the `nvim` folder inside that repository:
 ```text
 <repo-root>\nvim
 ```
-
-## VS Code
-
-The `vscode` directory contains optional tasks/settings that can be copied or symlinked into `.vscode` if desired. The main runner is `scripts\run.py`.
 
 ## Language Server
 
