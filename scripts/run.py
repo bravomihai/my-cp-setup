@@ -28,6 +28,7 @@ def open_new_cmd(source: Path) -> int:
         return 1
 
     run_command_line = list2cmdline([sys.executable, str(Path(__file__).resolve()), str(source)])
+    run_command_line = f"{run_command_line} & echo. & pause"
     subprocess.Popen(["cmd", "/c", "start", "", "/D", str(source.parent), "cmd", "/k", run_command_line])
     return 0
 
