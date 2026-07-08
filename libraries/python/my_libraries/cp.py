@@ -1,21 +1,28 @@
 import sys
 import time
 
-_tokens = iter(sys.stdin.buffer.read().split())
+_tokens = None
 _out = []
 DEBUG = True
 
 
+def _get_tokens():
+    global _tokens
+    if _tokens is None:
+        _tokens = iter(sys.stdin.buffer.read().split())
+    return _tokens
+
+
 def token():
-    return next(_tokens).decode()
+    return next(_get_tokens()).decode()
 
 
 def ni():
-    return int(next(_tokens))
+    return int(next(_get_tokens()))
 
 
 def nf():
-    return float(next(_tokens))
+    return float(next(_get_tokens()))
 
 
 def print_(*values, sep=" ", end="\n"):
