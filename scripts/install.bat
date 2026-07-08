@@ -5,7 +5,24 @@ for /F "tokens=1 delims=#" %%A in ('"prompt #$E# & echo on & for %%B in (1) do r
 for %%I in ("%~dp0..") do set "ROOT=%%~fI"
 
 set "CHECK_ONLY=0"
-if /i "%~1"=="--check" set "CHECK_ONLY=1"
+set "VERBOSE=0"
+
+:parse_args
+if "%~1"=="" goto parsed_args
+if /i "%~1"=="--check" (
+    set "CHECK_ONLY=1"
+    shift
+    goto parse_args
+)
+if /i "%~1"=="--verbose" (
+    set "VERBOSE=1"
+    shift
+    goto parse_args
+)
+echo [%ESC%[31mFAILED%ESC%[0m] Unknown argument: %~1
+exit /b 1
+
+:parsed_args
 
 echo CP setup root:
 echo %ROOT%
@@ -22,7 +39,10 @@ where g++ >nul 2>nul
 if not errorlevel 1 (
     rem g++ is already available.
 ) else (
-    if "%CHECK_ONLY%"=="1" goto failed
+    if "%CHECK_ONLY%"=="1" (
+        echo [%ESC%[33mMISSING%ESC%[0m] g++
+        goto failed
+    )
     call :install_msys2_toolchain
     if errorlevel 1 goto failed
 )
@@ -42,7 +62,10 @@ if errorlevel 1 (
 
 call :find_python
 if errorlevel 1 (
-    if "%CHECK_ONLY%"=="1" goto failed
+    if "%CHECK_ONLY%"=="1" (
+        echo [%ESC%[33mMISSING%ESC%[0m] Python 3
+        goto failed
+    )
 
     call :install_msys2_toolchain
     if errorlevel 1 goto failed
@@ -88,7 +111,7 @@ exit /b 0
 :need_or_install
 where "%~1" >nul 2>nul
 if not errorlevel 1 (
-    echo [%ESC%[32mOK%ESC%[0m] %~3 found
+    if "%VERBOSE%"=="1" echo [%ESC%[32mOK%ESC%[0m] %~3 found
     exit /b 0
 )
 
@@ -119,7 +142,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='
 exit /b %ERRORLEVEL%
 
 :install_paths
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $check='%~1' -ieq 'check'; $esc=[char]27; $jdkBins=@(); if (Test-Path -LiteralPath 'C:\Program Files\Eclipse Adoptium') { $jdkBins=Get-ChildItem -LiteralPath 'C:\Program Files\Eclipse Adoptium' -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'bin' } }; $c=@((Join-Path $root 'scripts'),'C:\Program Files\Git\cmd','C:\Program Files\Git\usr\bin','C:\Program Files\Git\mingw64\libexec\git-core','D:\software\programming\git\Git\cmd','D:\software\programming\git\Git\usr\bin','D:\software\programming\git\Git\mingw64\libexec\git-core','C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin') + $jdkBins; $e=$c | Where-Object { Test-Path -LiteralPath $_ }; if ($check) { foreach ($p in $e) { Write-Host \"[$($esc)[38;5;183mCHECK$($esc)[0m] PATH candidate exists: $p\" }; exit 0 }; $u=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $u) { $u='' }; $parts=$u -split ';' | Where-Object { $_ }; foreach ($p in $e) { $a=$parts | Where-Object { $_.TrimEnd('\') -ieq $p.TrimEnd('\') }; if (-not $a) { $parts += $p; Write-Host \"[PATH] Added: $p\" } }; [Environment]::SetEnvironmentVariable('Path',($parts -join ';'),'User')"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $check='%~1' -ieq 'check'; $verbose='%VERBOSE%' -eq '1'; $esc=[char]27; $jdkBins=@(); if (Test-Path -LiteralPath 'C:\Program Files\Eclipse Adoptium') { $jdkBins=Get-ChildItem -LiteralPath 'C:\Program Files\Eclipse Adoptium' -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'bin' } }; $c=@((Join-Path $root 'scripts'),'C:\Program Files\Git\cmd','C:\Program Files\Git\usr\bin','C:\Program Files\Git\mingw64\libexec\git-core','D:\software\programming\git\Git\cmd','D:\software\programming\git\Git\usr\bin','D:\software\programming\git\Git\mingw64\libexec\git-core','C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin') + $jdkBins; $e=$c | Where-Object { Test-Path -LiteralPath $_ }; if ($check) { if ($verbose) { foreach ($p in $e) { Write-Host \"[$($esc)[38;5;183mCHECK$($esc)[0m] PATH candidate exists: $p\" } } else { Write-Host \"[$($esc)[38;5;183mCHECK$($esc)[0m] Environment paths\" }; exit 0 }; $u=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $u) { $u='' }; $parts=$u -split ';' | Where-Object { $_ }; foreach ($p in $e) { $a=$parts | Where-Object { $_.TrimEnd('\') -ieq $p.TrimEnd('\') }; if (-not $a) { $parts += $p; if ($verbose) { Write-Host \"[PATH] Added: $p\" } } }; [Environment]::SetEnvironmentVariable('Path',($parts -join ';'),'User')"
 exit /b %ERRORLEVEL%
 
 :install_cmd_macros
@@ -231,7 +254,7 @@ call :cleanup_verify
 exit /b 1
 
 :ensure_spinner
-set "SPINNER_PY=%TEMP%\cp_setup_spinner.py"
+set "SPINNER_PY=%TEMP%\cp_setup_spinner_%RANDOM%_%RANDOM%.py"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$code=@('import argparse','import subprocess','import sys','import time','from pathlib import Path','','PURPLE = chr(27) + ''[38;5;183m''','RESET = chr(27) + ''[0m''','FRAMES = list(chr(92) + ''-/|'')','','def main() -> int:','    parser = argparse.ArgumentParser()','    parser.add_argument(''--label'', required=True)','    parser.add_argument(''--cwd'', default=str(Path.cwd()))','    parser.add_argument(''--stdin-empty'', action=''store_true'')','    parser.add_argument(''command'', nargs=argparse.REMAINDER)','    args = parser.parse_args()','    command = args.command[1:] if args.command and args.command[0] == ''--'' else args.command','    if not command:','        print(''spinner: missing command'', file=sys.stderr)','        return 1','    stdin = subprocess.DEVNULL if args.stdin_empty else None','    process = subprocess.Popen(command, cwd=args.cwd, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)','    index = 0','    while process.poll() is None:','        print(''\r[{}VERIFY{}] {} {}''.format(PURPLE, RESET, FRAMES[index %% len(FRAMES)], args.label), end='''', flush=True)','        time.sleep(0.1)','        index += 1','    stdout, stderr = process.communicate()','    if process.returncode == 0:','        print(''\r[{}VERIFY{}] {}''.format(PURPLE, RESET, args.label))','        return 0','    print(''\r[{}VERIFY{}] failed {}''.format(PURPLE, RESET, args.label), file=sys.stderr)','    if stderr:','        print(stderr, file=sys.stderr, end='''')','    if stdout:','        print(stdout, file=sys.stderr, end='''')','    return process.returncode','','if __name__ == ''__main__'':','    raise SystemExit(main())'); [IO.File]::WriteAllText('%SPINNER_PY%', ($code -join [Environment]::NewLine))"
 exit /b %ERRORLEVEL%
 
@@ -246,6 +269,7 @@ del "%TEMP%\Cp.class" >nul 2>nul
 del "%TEMP%\Cp$FastScanner.class" >nul 2>nul
 del "%TEMP%\Cp$Timer.class" >nul 2>nul
 del "%TEMP%\cp_submit_test.exe" >nul 2>nul
+if defined SPINNER_PY del "%SPINNER_PY%" >nul 2>nul
 del "%TEMP%\cp_setup_spinner.py" >nul 2>nul
 if exist "%ROOT%\libraries\python\my_libraries\__pycache__" rmdir /s /q "%ROOT%\libraries\python\my_libraries\__pycache__"
 if exist "%ROOT%\template\python\__pycache__" rmdir /s /q "%ROOT%\template\python\__pycache__"
