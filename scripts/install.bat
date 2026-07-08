@@ -125,34 +125,50 @@ if not defined CP_PYTHON exit /b 1
 where javac >nul 2>nul || exit /b 1
 where g++ >nul 2>nul || exit /b 1
 
-echo [VERIFY] Run C++ template
+echo [%ESC%[95mVERIFY%ESC%[0m] Run C++ template
 "%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\cpp\solve.cpp" <nul >nul 2>nul
-if errorlevel 1 exit /b 1
-echo [VERIFY] Run Java template
+if errorlevel 1 goto verify_failed
+echo [%ESC%[95mVERIFY%ESC%[0m] Run Java template
 "%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\java\solve.java" <nul >nul 2>nul
-if errorlevel 1 exit /b 1
-echo [VERIFY] Run Python template
+if errorlevel 1 goto verify_failed
+echo [%ESC%[95mVERIFY%ESC%[0m] Run Python template
 "%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\python\solve.py" <nul >nul 2>nul
-if errorlevel 1 exit /b 1
-echo [VERIFY] Expand C++ template
+if errorlevel 1 goto verify_failed
+echo [%ESC%[95mVERIFY%ESC%[0m] Expand C++ template
 "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
-if errorlevel 1 exit /b 1
-echo [VERIFY] Expand Java template
+if errorlevel 1 goto verify_failed
+echo [%ESC%[95mVERIFY%ESC%[0m] Expand Java template
 "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\java\solve.java" >nul 2>nul
-if errorlevel 1 exit /b 1
-echo [VERIFY] Expand Python template
+if errorlevel 1 goto verify_failed
+echo [%ESC%[95mVERIFY%ESC%[0m] Expand Python template
 "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\python\solve.py" >nul 2>nul
-if errorlevel 1 exit /b 1
-echo [VERIFY] Compile expanded C++
+if errorlevel 1 goto verify_failed
+echo [%ESC%[95mVERIFY%ESC%[0m] Compile expanded C++
 g++ -std=c++20 -O2 "%ROOT%\template\cpp\submit.cpp" -o "%TEMP%\cp_submit_test.exe"
-if errorlevel 1 exit /b 1
-echo [VERIFY] Compile expanded Java
+if errorlevel 1 goto verify_failed
+echo [%ESC%[95mVERIFY%ESC%[0m] Compile expanded Java
 javac -encoding UTF-8 -d "%TEMP%" "%ROOT%\template\java\submit.java"
-if errorlevel 1 exit /b 1
-echo [VERIFY] Parse expanded Python
+if errorlevel 1 goto verify_failed
+echo [%ESC%[95mVERIFY%ESC%[0m] Parse expanded Python
 "%CP_PYTHON%" -c "import ast, pathlib; ast.parse(pathlib.Path(r'%ROOT%\template\python\submit.py').read_text())"
+if errorlevel 1 goto verify_failed
+
+call :cleanup_verify
 if errorlevel 1 exit /b 1
 
+if exist "%ROOT%\.git" (
+    git -C "%ROOT%" submodule status >nul
+    if errorlevel 1 exit /b 1
+)
+
+echo [%ESC%[32mOK%ESC%[0m] Verification passed
+exit /b 0
+
+:verify_failed
+call :cleanup_verify
+exit /b 1
+
+:cleanup_verify
 del "%ROOT%\template\cpp\submit.cpp" >nul 2>nul
 del "%ROOT%\template\java\submit.java" >nul 2>nul
 del "%ROOT%\template\python\submit.py" >nul 2>nul
@@ -165,13 +181,6 @@ del "%TEMP%\Cp$Timer.class" >nul 2>nul
 del "%TEMP%\cp_submit_test.exe" >nul 2>nul
 if exist "%ROOT%\libraries\python\my_libraries\__pycache__" rmdir /s /q "%ROOT%\libraries\python\my_libraries\__pycache__"
 if exist "%ROOT%\template\python\__pycache__" rmdir /s /q "%ROOT%\template\python\__pycache__"
-
-if exist "%ROOT%\.git" (
-    git -C "%ROOT%" submodule status >nul
-    if errorlevel 1 exit /b 1
-)
-
-echo [%ESC%[32mOK%ESC%[0m] Verification passed
 exit /b 0
 
 :failed
