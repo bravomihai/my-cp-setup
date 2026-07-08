@@ -77,9 +77,9 @@ my-cp-setup
 |   |-- java/solve.java
 |   `-- python/solve.py
 |-- .clang-format
+|-- .clangd
 |-- .gitignore
 |-- .gitmodules
-|-- compile_flags.txt
 `-- README.md
 ```
 
@@ -150,7 +150,7 @@ Neovim then loads the `nvim` folder inside that repository:
 
 ## Language Server
 
-`compile_flags.txt` contains:
+`.clangd` contains the C++ flags used by clangd:
 
 ```text
 -std=c++20

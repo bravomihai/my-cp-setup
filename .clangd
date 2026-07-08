@@ -1,0 +1,9 @@
+CompileFlags:
+  Add:
+    - -std=c++20
+    - -I.
+    - -Iac-library
+    - -Ilibraries/cpp
+
+Clangd:
+  QueryDriver: D:/software/programming/msys2/mingw64/bin/g++.exe

@@ -30,4 +30,3 @@ debug/
 Thumbs.db
 
 # editor local configs
-/.clangd
