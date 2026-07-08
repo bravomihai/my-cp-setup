@@ -28,6 +28,12 @@ echo CP setup root:
 echo %ROOT%
 echo.
 
+if "%CHECK_ONLY%"=="0" (
+    call :install_paths
+    if errorlevel 1 goto failed
+    call :refresh_path
+)
+
 call :need_or_install git Git.Git "Git"
 if errorlevel 1 goto failed
 call :need_or_install nvim Neovim.Neovim "Neovim"
@@ -120,23 +126,32 @@ if "%CHECK_ONLY%"=="1" (
     exit /b 0
 )
 
-where winget >nul 2>nul
-if errorlevel 1 (
-    echo [%ESC%[31mFAILED%ESC%[0m] winget is required to install %~3 automatically.
-    exit /b 1
-)
+call :require_winget
+if errorlevel 1 exit /b 1
 
 echo [%ESC%[38;5;183mINSTALL%ESC%[0m] %~3
-winget install --id %~2 --exact --accept-package-agreements --accept-source-agreements
+"%WINGET%" install --id %~2 --exact --accept-package-agreements --accept-source-agreements
 exit /b %ERRORLEVEL%
 
-:install_msys2_toolchain
-where winget >nul 2>nul
-if errorlevel 1 (
-    echo [%ESC%[31mFAILED%ESC%[0m] winget is required to install MSYS2 automatically.
-    exit /b 1
+:require_winget
+set "WINGET="
+for /F "usebackq delims=" %%P in (`where winget 2^>nul`) do (
+    if not defined WINGET set "WINGET=%%P"
 )
-winget install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements
+if not defined WINGET if exist "%LOCALAPPDATA%\Microsoft\WindowsApps\winget.exe" set "WINGET=%LOCALAPPDATA%\Microsoft\WindowsApps\winget.exe"
+if defined WINGET (
+    for %%I in ("%WINGET%") do set "PATH=%%~dpI;%PATH%"
+    exit /b 0
+)
+echo [%ESC%[31mFAILED%ESC%[0m] winget was not found.
+echo Install or update App Installer from Microsoft Store, open a new cmd.exe, then rerun this installer.
+echo Store shortcut: start ms-windows-store://pdp/?ProductId=9NBLGGH4NNS1
+exit /b 1
+
+:install_msys2_toolchain
+call :require_winget
+if errorlevel 1 exit /b 1
+"%WINGET%" install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements
 if errorlevel 1 exit /b %ERRORLEVEL%
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -Syu --noconfirm'; if ($LASTEXITCODE -ne 0) { throw 'pacman system update failed.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }"
 exit /b %ERRORLEVEL%
