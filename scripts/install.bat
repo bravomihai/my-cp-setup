@@ -20,13 +20,11 @@ if errorlevel 1 goto failed
 
 where g++ >nul 2>nul
 if not errorlevel 1 (
-    echo [%ESC%[32mOK%ESC%[0m] g++ found
+    rem g++ is already available.
 ) else (
-    echo [%ESC%[33mMISSING%ESC%[0m] g++
-    if "%CHECK_ONLY%"=="0" (
-        call :install_msys2_toolchain
-        if errorlevel 1 goto failed
-    )
+    if "%CHECK_ONLY%"=="1" goto failed
+    call :install_msys2_toolchain
+    if errorlevel 1 goto failed
 )
 
 if "%CHECK_ONLY%"=="1" (
@@ -41,20 +39,20 @@ if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] g++ was installed, but g++.exe was not found in known MSYS2 paths.
     goto failed
 )
-echo [%ESC%[32mOK%ESC%[0m] g++ found
 
 call :find_python
 if errorlevel 1 (
-    echo [%ESC%[33mMISSING%ESC%[0m] Python 3
     if "%CHECK_ONLY%"=="1" goto failed
 
     call :install_msys2_toolchain
     if errorlevel 1 goto failed
     call :refresh_path
     call :find_python
-    if errorlevel 1 goto failed
+    if errorlevel 1 (
+        echo [%ESC%[31mFAILED%ESC%[0m] Python was installed, but python.exe was not found in known MSYS2 paths.
+        goto failed
+    )
 )
-echo [%ESC%[32mOK%ESC%[0m] Python found: %CP_PYTHON%
 
 if "%CHECK_ONLY%"=="0" (
     powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('XDG_CONFIG_HOME', '%ROOT%', 'User')"
@@ -70,7 +68,7 @@ if "%CHECK_ONLY%"=="0" (
     call :install_cmd_macros
     if errorlevel 1 goto failed
 ) else (
-    echo [%ESC%[38;5;183mCHECK%ESC%[0m] Skipping environment writes and DOSKEY install.
+    echo [%ESC%[38;5;183mCHECK%ESC%[0m] Environment writes skipped.
 )
 
 if exist "%ROOT%\.git" (
@@ -94,8 +92,10 @@ if not errorlevel 1 (
     exit /b 0
 )
 
-echo [%ESC%[33mMISSING%ESC%[0m] %~3
-if "%CHECK_ONLY%"=="1" exit /b 0
+if "%CHECK_ONLY%"=="1" (
+    echo [%ESC%[33mMISSING%ESC%[0m] %~3
+    exit /b 0
+)
 
 where winget >nul 2>nul
 if errorlevel 1 (
@@ -103,6 +103,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo [%ESC%[38;5;183mINSTALL%ESC%[0m] %~3
 winget install --id %~2 --exact --accept-package-agreements --accept-source-agreements
 exit /b %ERRORLEVEL%
 
@@ -141,10 +142,6 @@ if errorlevel 1 (
     exit /b 1
 )
 doskey /macrofile="%MACROS%"
-echo Installed DOSKEY macros from:
-echo %MACROS%
-echo.
-echo New cmd.exe windows will load them automatically.
 exit /b 0
 
 :refresh_path
@@ -235,7 +232,7 @@ exit /b 1
 
 :ensure_spinner
 set "SPINNER_PY=%TEMP%\cp_setup_spinner.py"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "[IO.File]::WriteAllBytes('%SPINNER_PY%', [Convert]::FromBase64String('aW1wb3J0IGFyZ3BhcnNlCmltcG9ydCBzdWJwcm9jZXNzCmltcG9ydCBzeXMKaW1wb3J0IHRpbWUKZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpQVVJQTEUgPSAiXDAzM1szODs1OzE4M20iClJFU0VUID0gIlwwMzNbMG0iCkZSQU1FUyA9IFsiXFwiLCAiLSIsICIvIiwgInwiXQoKCmRlZiBtYWluKCkgLT4gaW50OgogICAgcGFyc2VyID0gYXJncGFyc2UuQXJndW1lbnRQYXJzZXIoKQogICAgcGFyc2VyLmFkZF9hcmd1bWVudCgiLS1sYWJlbCIsIHJlcXVpcmVkPVRydWUpCiAgICBwYXJzZXIuYWRkX2FyZ3VtZW50KCItLWN3ZCIsIGRlZmF1bHQ9c3RyKFBhdGguY3dkKCkpKQogICAgcGFyc2VyLmFkZF9hcmd1bWVudCgiLS1zdGRpbi1lbXB0eSIsIGFjdGlvbj0ic3RvcmVfdHJ1ZSIpCiAgICBwYXJzZXIuYWRkX2FyZ3VtZW50KCJjb21tYW5kIiwgbmFyZ3M9YXJncGFyc2UuUkVNQUlOREVSKQogICAgYXJncyA9IHBhcnNlci5wYXJzZV9hcmdzKCkKICAgIGNvbW1hbmQgPSBhcmdzLmNvbW1hbmRbMTpdIGlmIGFyZ3MuY29tbWFuZCBhbmQgYXJncy5jb21tYW5kWzBdID09ICItLSIgZWxzZSBhcmdzLmNvbW1hbmQKICAgIGlmIG5vdCBjb21tYW5kOgogICAgICAgIHByaW50KCJzcGlubmVyOiBtaXNzaW5nIGNvbW1hbmQiLCBmaWxlPXN5cy5zdGRlcnIpCiAgICAgICAgcmV0dXJuIDEKICAgIHN0ZGluID0gc3VicHJvY2Vzcy5ERVZOVUxMIGlmIGFyZ3Muc3RkaW5fZW1wdHkgZWxzZSBOb25lCiAgICBwcm9jZXNzID0gc3VicHJvY2Vzcy5Qb3Blbihjb21tYW5kLCBjd2Q9YXJncy5jd2QsIHN0ZGluPXN0ZGluLCBzdGRvdXQ9c3VicHJvY2Vzcy5QSVBFLCBzdGRlcnI9c3VicHJvY2Vzcy5QSVBFLCB0ZXh0PVRydWUpCiAgICBpbmRleCA9IDAKICAgIHdoaWxlIHByb2Nlc3MucG9sbCgpIGlzIE5vbmU6CiAgICAgICAgcHJpbnQoZiJcclt7UFVSUExFfVZFUklGWXtSRVNFVH1dIHtGUkFNRVNbaW5kZXggJSBsZW4oRlJBTUVTKV19IHthcmdzLmxhYmVsfSIsIGVuZD0iIiwgZmx1c2g9VHJ1ZSkKICAgICAgICB0aW1lLnNsZWVwKDAuMSkKICAgICAgICBpbmRleCArPSAxCiAgICBzdGRvdXQsIHN0ZGVyciA9IHByb2Nlc3MuY29tbXVuaWNhdGUoKQogICAgaWYgcHJvY2Vzcy5yZXR1cm5jb2RlID09IDA6CiAgICAgICAgcHJpbnQoZiJcclt7UFVSUExFfVZFUklGWXtSRVNFVH1dIGRvbmUge2FyZ3MubGFiZWx9IikKICAgICAgICByZXR1cm4gMAogICAgcHJpbnQoZiJcclt7UFVSUExFfVZFUklGWXtSRVNFVH1dIGZhaWxlZCB7YXJncy5sYWJlbH0iLCBmaWxlPXN5cy5zdGRlcnIpCiAgICBpZiBzdGRlcnI6CiAgICAgICAgcHJpbnQoc3RkZXJyLCBmaWxlPXN5cy5zdGRlcnIsIGVuZD0iIikKICAgIGlmIHN0ZG91dDoKICAgICAgICBwcmludChzdGRvdXQsIGZpbGU9c3lzLnN0ZGVyciwgZW5kPSIiKQogICAgcmV0dXJuIHByb2Nlc3MucmV0dXJuY29kZQoKCmlmIF9fbmFtZV9fID09ICJfX21haW5fXyI6CiAgICByYWlzZSBTeXN0ZW1FeGl0KG1haW4oKSkK'))"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$code=@('import argparse','import subprocess','import sys','import time','from pathlib import Path','','PURPLE = chr(27) + ''[38;5;183m''','RESET = chr(27) + ''[0m''','FRAMES = list(chr(92) + ''-/|'')','','def main() -> int:','    parser = argparse.ArgumentParser()','    parser.add_argument(''--label'', required=True)','    parser.add_argument(''--cwd'', default=str(Path.cwd()))','    parser.add_argument(''--stdin-empty'', action=''store_true'')','    parser.add_argument(''command'', nargs=argparse.REMAINDER)','    args = parser.parse_args()','    command = args.command[1:] if args.command and args.command[0] == ''--'' else args.command','    if not command:','        print(''spinner: missing command'', file=sys.stderr)','        return 1','    stdin = subprocess.DEVNULL if args.stdin_empty else None','    process = subprocess.Popen(command, cwd=args.cwd, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)','    index = 0','    while process.poll() is None:','        print(''\r[{}VERIFY{}] {} {}''.format(PURPLE, RESET, FRAMES[index %% len(FRAMES)], args.label), end='''', flush=True)','        time.sleep(0.1)','        index += 1','    stdout, stderr = process.communicate()','    if process.returncode == 0:','        print(''\r[{}VERIFY{}] {}''.format(PURPLE, RESET, args.label))','        return 0','    print(''\r[{}VERIFY{}] failed {}''.format(PURPLE, RESET, args.label), file=sys.stderr)','    if stderr:','        print(stderr, file=sys.stderr, end='''')','    if stdout:','        print(stdout, file=sys.stderr, end='''')','    return process.returncode','','if __name__ == ''__main__'':','    raise SystemExit(main())'); [IO.File]::WriteAllText('%SPINNER_PY%', ($code -join [Environment]::NewLine))"
 exit /b %ERRORLEVEL%
 
 :cleanup_verify

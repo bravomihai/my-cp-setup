@@ -125,6 +125,7 @@ Install macro loading:
 Use `scripts\install.bat`; macro loading is part of the installer.
 
 New `cmd.exe` windows load these automatically after install.
+The installer sets `HKCU\Software\Microsoft\Command Processor\AutoRun` to load `scripts\cp_macros` with `doskey /macrofile`.
 The `run` and `expand` macros use `CP_PYTHON`, so they do not depend on the `python.exe` Microsoft Store alias. See `scripts\cp_macros` for the current macro list.
 
 ## Neovim
