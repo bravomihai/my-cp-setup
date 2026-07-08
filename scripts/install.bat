@@ -129,8 +129,17 @@ if "%CHECK_ONLY%"=="1" (
 call :require_winget
 if errorlevel 1 exit /b 1
 
-echo [%ESC%[38;5;183mINSTALL%ESC%[0m] %~3
-"%WINGET%" install --id %~2 --exact --accept-package-agreements --accept-source-agreements
+echo [%ESC%[38;5;183mINSTALL%ESC%[0m] %~3 via winget: %~2
+if "%VERBOSE%"=="1" (
+    "%WINGET%" install --id %~2 --exact --accept-package-agreements --accept-source-agreements
+) else (
+    "%WINGET%" install --id %~2 --exact --accept-package-agreements --accept-source-agreements >"%TEMP%\cp_setup_winget.log" 2>&1
+)
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for %~3.
+    if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
+    exit /b 1
+)
 exit /b %ERRORLEVEL%
 
 :require_winget
@@ -151,9 +160,28 @@ exit /b 1
 :install_msys2_toolchain
 call :require_winget
 if errorlevel 1 exit /b 1
-"%WINGET%" install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements
-if errorlevel 1 exit /b %ERRORLEVEL%
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -Syu --noconfirm'; if ($LASTEXITCODE -ne 0) { throw 'pacman system update failed.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }"
+echo [%ESC%[38;5;183mINSTALL%ESC%[0m] MSYS2 via winget: MSYS2.MSYS2
+if "%VERBOSE%"=="1" (
+    "%WINGET%" install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements
+) else (
+    "%WINGET%" install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements >"%TEMP%\cp_setup_winget.log" 2>&1
+)
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for MSYS2.
+    if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
+    exit /b 1
+)
+echo [%ESC%[38;5;183mINSTALL%ESC%[0m] MSYS2 toolchain via pacman
+if "%VERBOSE%"=="1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -Syu --noconfirm'; if ($LASTEXITCODE -ne 0) { throw 'pacman system update failed.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }"
+) else (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -Syu --noconfirm'; if ($LASTEXITCODE -ne 0) { throw 'pacman system update failed.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }" >"%TEMP%\cp_setup_pacman.log" 2>&1
+)
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] pacman toolchain install failed.
+    if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_pacman.log
+    exit /b 1
+)
 exit /b %ERRORLEVEL%
 
 :install_paths
