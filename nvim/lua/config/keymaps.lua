@@ -44,23 +44,6 @@ vim.keymap.set("n", "<leader>e", function()
   vim.notify(vim.trim(out))
 end, { desc = "Expand for submission" })
 
--- debug
-vim.keymap.set("n", "<leader>d", function()
-  vim.cmd("w")
-  local file = vim.fn.expand("%:p")
-  local dir = vim.fn.expand("%:p:h")
-  local ext = vim.fn.expand("%:e")
-
-  if ext ~= "cpp" then
-    vim.notify("Debug is only configured for .cpp files", vim.log.levels.WARN)
-    return
-  end
-
-  local debugger = scripts_dir .. "debug_cpp.bat"
-  local cmd = 'start "" cmd /k "cd /d ' .. dir .. ' && "' .. debugger .. '" "' .. file .. '""'
-  vim.fn.system(cmd)
-end, { desc = "Debug C++" })
-
 -- LSP
 vim.keymap.set("n", "gd", vim.lsp.buf.definition)
 vim.keymap.set("n", "gr", vim.lsp.buf.references)

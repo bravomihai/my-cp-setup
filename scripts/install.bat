@@ -110,7 +110,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='
 exit /b %ERRORLEVEL%
 
 :install_paths
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $check='%~1' -ieq 'check'; $esc=[char]27; $c=@((Join-Path $root 'scripts'),'C:\Program Files\Git\cmd','C:\Program Files\Git\usr\bin','C:\Program Files\Git\mingw64\libexec\git-core','D:\software\programming\git\Git\cmd','D:\software\programming\git\Git\usr\bin','D:\software\programming\git\Git\mingw64\libexec\git-core','C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin'); $e=$c | Where-Object { Test-Path -LiteralPath $_ }; if ($check) { foreach ($p in $e) { Write-Host \"[$($esc)[38;5;183mCHECK$($esc)[0m] PATH candidate exists: $p\" }; exit 0 }; $u=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $u) { $u='' }; $parts=$u -split ';' | Where-Object { $_ }; foreach ($p in $e) { $a=$parts | Where-Object { $_.TrimEnd('\') -ieq $p.TrimEnd('\') }; if (-not $a) { $parts += $p; Write-Host \"[PATH] Added: $p\" } }; [Environment]::SetEnvironmentVariable('Path',($parts -join ';'),'User')"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $check='%~1' -ieq 'check'; $esc=[char]27; $jdkBins=@(); if (Test-Path -LiteralPath 'C:\Program Files\Eclipse Adoptium') { $jdkBins=Get-ChildItem -LiteralPath 'C:\Program Files\Eclipse Adoptium' -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'bin' } }; $c=@((Join-Path $root 'scripts'),'C:\Program Files\Git\cmd','C:\Program Files\Git\usr\bin','C:\Program Files\Git\mingw64\libexec\git-core','D:\software\programming\git\Git\cmd','D:\software\programming\git\Git\usr\bin','D:\software\programming\git\Git\mingw64\libexec\git-core','C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin') + $jdkBins; $e=$c | Where-Object { Test-Path -LiteralPath $_ }; if ($check) { foreach ($p in $e) { Write-Host \"[$($esc)[38;5;183mCHECK$($esc)[0m] PATH candidate exists: $p\" }; exit 0 }; $u=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $u) { $u='' }; $parts=$u -split ';' | Where-Object { $_ }; foreach ($p in $e) { $a=$parts | Where-Object { $_.TrimEnd('\') -ieq $p.TrimEnd('\') }; if (-not $a) { $parts += $p; Write-Host \"[PATH] Added: $p\" } }; [Environment]::SetEnvironmentVariable('Path',($parts -join ';'),'User')"
 exit /b %ERRORLEVEL%
 
 :install_cmd_macros
@@ -151,14 +151,36 @@ exit /b 1
 
 :verify
 call :refresh_path
-where git >nul 2>nul || exit /b 1
-where nvim >nul 2>nul || exit /b 1
+where git >nul 2>nul
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] git is not visible during verification.
+    exit /b 1
+)
+where nvim >nul 2>nul
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] nvim is not visible during verification.
+    exit /b 1
+)
 if not defined CP_PYTHON call :find_python
-if not defined CP_PYTHON exit /b 1
-where javac >nul 2>nul || exit /b 1
-where g++ >nul 2>nul || exit /b 1
+if not defined CP_PYTHON (
+    echo [%ESC%[31mFAILED%ESC%[0m] Python is not visible during verification.
+    exit /b 1
+)
+where javac >nul 2>nul
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] javac is not visible during verification.
+    exit /b 1
+)
+where g++ >nul 2>nul
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] g++ is not visible during verification.
+    exit /b 1
+)
 call :ensure_spinner
-if errorlevel 1 exit /b 1
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] Could not create verification spinner.
+    exit /b 1
+)
 
 "%CP_PYTHON%" "%SPINNER_PY%" --label "Run C++ template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\cpp\solve.cpp"
 if errorlevel 1 goto verify_failed

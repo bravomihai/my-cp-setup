@@ -68,7 +68,6 @@ my-cp-setup
 |-- nvim/                    Neovim configuration
 |-- scripts/
 |   |-- cp_macros            CMD DOSKEY macros
-|   |-- debug_cpp.bat        Compile C++ with debug symbols and run gdb
 |   |-- expand.py            Generate submit.cpp/submit.java/submit.py
 |   |-- install.bat          Windows installer
 |   `-- run.py               Run C++/Java/Python files
@@ -118,12 +117,6 @@ On success it prints one of:
 ```
 
 Only `DONE` is green. On failure it prints an `EXPAND FAILED` message.
-
-## Debug C++
-
-```bat
-scripts\debug_cpp.bat template\cpp\solve.cpp
-```
 
 ## CMD Macros
 

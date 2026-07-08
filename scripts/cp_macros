@@ -6,4 +6,3 @@ solve_py=nvim "%CP_SETUP_ROOT%\template\python\solve.py"
 input=cd /d "%CP_SETUP_ROOT%" && nvim input.txt
 run="%CP_PYTHON%" "%CP_SETUP_ROOT%\scripts\run.py" $*
 expand="%CP_PYTHON%" "%CP_SETUP_ROOT%\scripts\expand.py" $*
-debug="%CP_SETUP_ROOT%\scripts\debug_cpp.bat" $*
