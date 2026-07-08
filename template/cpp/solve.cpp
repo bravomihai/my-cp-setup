@@ -8,6 +8,7 @@ using namespace atcoder;
 
 // clang-format on
 void solve() {
+    cout << "Hello, World!\n";
 }
 // clang-format off
 

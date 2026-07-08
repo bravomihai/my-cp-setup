@@ -2,7 +2,12 @@ from my_libraries.cp import *
 
 
 def solve():
-    print_("hello world!")
+    print_("Hello, World!")
+
+
+#   /\_/\
+#  (= ._.)
+#  / >  \>
 
 
 def main():

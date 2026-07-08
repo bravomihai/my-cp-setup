@@ -2,8 +2,13 @@ import my_libraries.Cp;
 
 public class solve {
     static void solve() throws Exception {
-        Cp.println("hello world!");
+        Cp.println("Hello, World!");
     }
+
+    /*   /\_/\
+        (= ._.)
+        / >  \>
+    */
 
     public static void main(String[] args) throws Exception {
         Cp.Timer timer = new Cp.Timer();
