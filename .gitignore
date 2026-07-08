@@ -3,6 +3,9 @@
 *.out
 *.o
 *.obj
+*.class
+__pycache__/
+*.pyc
 
 # temporary files
 *.log
@@ -11,6 +14,14 @@
 # generated submission files
 submit.cpp
 solve_expand.cpp
+
+# local root workspace files
+/input.txt
+/solve.cpp
+/other.cpp
+/debug.cpp
+/bibliography/
+/cloudeflight_coding_contest/
 
 # debug folders
 debug/
@@ -21,3 +32,5 @@ Thumbs.db
 
 # editor local configs
 .vscode/*.code-workspace
+/.vscode/
+/.clangd

@@ -1,0 +1,150 @@
+@echo off
+setlocal EnableExtensions
+
+for /F "tokens=1 delims=#" %%A in ('"prompt #$E# & echo on & for %%B in (1) do rem"') do set "ESC=%%A"
+for %%I in ("%~dp0..") do set "ROOT=%%~fI"
+
+set "CHECK_ONLY=0"
+if /i "%~1"=="--check" set "CHECK_ONLY=1"
+
+echo CP setup root:
+echo %ROOT%
+echo.
+
+call :need_or_install git Git.Git "Git"
+if errorlevel 1 goto failed
+call :need_or_install nvim Neovim.Neovim "Neovim"
+if errorlevel 1 goto failed
+call :need_or_install python Python.Python.3.12 "Python 3"
+if errorlevel 1 goto failed
+call :need_or_install javac EclipseAdoptium.Temurin.21.JDK "JDK"
+if errorlevel 1 goto failed
+call :need_gpp
+if errorlevel 1 goto failed
+
+if "%CHECK_ONLY%"=="1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\install_paths.ps1" -Root "%ROOT%" -Check
+) else (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\install_paths.ps1" -Root "%ROOT%"
+)
+if errorlevel 1 goto failed
+call :refresh_path
+
+if "%CHECK_ONLY%"=="0" (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('XDG_CONFIG_HOME', '%ROOT%', 'User')"
+    if errorlevel 1 goto failed
+
+    call "%ROOT%\scripts\install_cmd_macros.bat"
+    if errorlevel 1 goto failed
+) else (
+    echo [CHECK] Skipping environment writes and DOSKEY install.
+)
+
+if exist "%ROOT%\.git" (
+    git -C "%ROOT%" submodule update --init ac-library
+    if errorlevel 1 goto failed
+)
+
+call :verify
+if errorlevel 1 goto failed
+
+echo.
+echo [%ESC%[32mDONE%ESC%[0m] CP setup is ready.
+echo Restart terminals so updated User PATH and XDG_CONFIG_HOME are visible everywhere.
+exit /b 0
+
+:need_or_install
+where "%~1" >nul 2>nul
+if not errorlevel 1 (
+    echo [%ESC%[32mOK%ESC%[0m] %~3 found
+    exit /b 0
+)
+
+echo [%ESC%[33mMISSING%ESC%[0m] %~3
+if "%CHECK_ONLY%"=="1" exit /b 0
+
+where winget >nul 2>nul
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] winget is required to install %~3 automatically.
+    exit /b 1
+)
+
+winget install --id %~2 --exact --accept-package-agreements --accept-source-agreements
+exit /b %ERRORLEVEL%
+
+:need_gpp
+where g++ >nul 2>nul
+if not errorlevel 1 (
+    echo [%ESC%[32mOK%ESC%[0m] g++ found
+    exit /b 0
+)
+
+echo [%ESC%[33mMISSING%ESC%[0m] g++
+if "%CHECK_ONLY%"=="1" exit /b 0
+
+where winget >nul 2>nul
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] winget is required to install MSYS2 automatically.
+    exit /b 1
+)
+
+winget install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements
+if errorlevel 1 exit /b 1
+
+call :refresh_path
+call :find_msys2_shell
+if not defined MSYS2_SHELL (
+    echo [%ESC%[31mFAILED%ESC%[0m] Could not find msys2_shell.cmd after installing MSYS2.
+    exit /b 1
+)
+
+"%MSYS2_SHELL%" -mingw64 -defterm -no-start -here -c "pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra"
+exit /b %ERRORLEVEL%
+
+:find_msys2_shell
+set "MSYS2_SHELL="
+if exist "C:\msys64\msys2_shell.cmd" set "MSYS2_SHELL=C:\msys64\msys2_shell.cmd"
+if exist "D:\software\programming\msys2\msys2_shell.cmd" set "MSYS2_SHELL=D:\software\programming\msys2\msys2_shell.cmd"
+exit /b 0
+
+:refresh_path
+for /F "usebackq tokens=* delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"`) do set "PATH=%%P"
+exit /b 0
+
+:verify
+call :refresh_path
+where git >nul 2>nul || exit /b 1
+where nvim >nul 2>nul || exit /b 1
+where python >nul 2>nul || exit /b 1
+where javac >nul 2>nul || exit /b 1
+where g++ >nul 2>nul || exit /b 1
+
+cmd /d /c call "%ROOT%\scripts\build_run.bat" __run "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
+if errorlevel 1 exit /b 1
+cmd /d /c call "%ROOT%\scripts\build_run.bat" __run "%ROOT%\template\java\solve.java" >nul 2>nul
+if errorlevel 1 exit /b 1
+cmd /d /c call "%ROOT%\scripts\build_run.bat" __run "%ROOT%\template\python\solve.py" >nul 2>nul
+if errorlevel 1 exit /b 1
+cmd /d /c call "%ROOT%\scripts\expand_cpp.bat" "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
+if errorlevel 1 exit /b 1
+g++ -std=c++20 -O2 "%ROOT%\template\cpp\submit.cpp" -o "%TEMP%\cp_submit_test.exe"
+if errorlevel 1 exit /b 1
+
+del "%ROOT%\template\cpp\submit.cpp" >nul 2>nul
+del "%ROOT%\template\cpp\solve.exe" >nul 2>nul
+del "%ROOT%\template\java\solve.class" >nul 2>nul
+del "%TEMP%\cp_submit_test.exe" >nul 2>nul
+if exist "%ROOT%\libraries\python\my_libraries\__pycache__" rmdir /s /q "%ROOT%\libraries\python\my_libraries\__pycache__"
+
+if exist "%ROOT%\.git" (
+    git -C "%ROOT%" submodule status >nul
+    if errorlevel 1 exit /b 1
+)
+
+echo [%ESC%[32mOK%ESC%[0m] Verification passed
+exit /b 0
+
+:failed
+echo.
+echo [%ESC%[31mFAILED%ESC%[0m] CP setup install did not complete.
+exit /b 1

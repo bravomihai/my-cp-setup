@@ -1,0 +1,9 @@
+cp=cd /d D:\coding\cp
+cpsetup=cd /d D:\coding\cp
+solve_cpp=nvim D:\coding\cp\template\cpp\solve.cpp
+solve_java=nvim D:\coding\cp\template\java\solve.java
+solve_py=nvim D:\coding\cp\template\python\solve.py
+input=cd /d D:\coding\cp && nvim input.txt
+run=D:\coding\cp\scripts\build_run.bat $*
+expand=D:\coding\cp\scripts\expand_cpp.bat $*
+debug=D:\coding\cp\scripts\debug_cpp.bat $*
