@@ -30,9 +30,9 @@ if not errorlevel 1 (
 )
 
 if "%CHECK_ONLY%"=="1" (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\install_paths.ps1" -Root "%ROOT%" -Check
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\install_paths.ps1" -Root "%ROOT%" -Check
 ) else (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\install_paths.ps1" -Root "%ROOT%"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\install_paths.ps1" -Root "%ROOT%"
 )
 if errorlevel 1 goto failed
 call :refresh_path
@@ -53,10 +53,13 @@ echo [%ESC%[32mOK%ESC%[0m] Python found: %CP_PYTHON%
 if "%CHECK_ONLY%"=="0" (
     powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('XDG_CONFIG_HOME', '%ROOT%', 'User')"
     if errorlevel 1 goto failed
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('CP_SETUP_ROOT', '%ROOT%', 'User')"
+    if errorlevel 1 goto failed
     powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('CP_PYTHON', '%CP_PYTHON%', 'User')"
     if errorlevel 1 goto failed
 
-    call "%ROOT%\scripts\install_cmd_macros.bat"
+    set "CP_SETUP_ROOT=%ROOT%"
+    call "%ROOT%\scripts\helpers\install_cmd_macros.bat"
     if errorlevel 1 goto failed
 ) else (
     echo [CHECK] Skipping environment writes and DOSKEY install.
@@ -103,7 +106,7 @@ if errorlevel 1 (
 )
 winget install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements
 if errorlevel 1 exit /b %ERRORLEVEL%
-powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\install_msys2_toolchain.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\install_msys2_toolchain.ps1"
 exit /b %ERRORLEVEL%
 
 :refresh_path
@@ -112,7 +115,7 @@ exit /b 0
 
 :find_python
 set "CP_PYTHON="
-for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\find_python.ps1"`) do set "CP_PYTHON=%%P"
+for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\helpers\find_python.ps1"`) do set "CP_PYTHON=%%P"
 if defined CP_PYTHON exit /b 0
 exit /b 1
 
@@ -125,32 +128,23 @@ if not defined CP_PYTHON exit /b 1
 where javac >nul 2>nul || exit /b 1
 where g++ >nul 2>nul || exit /b 1
 
-echo [%ESC%[38;5;183mVERIFY%ESC%[0m] Run C++ template
-"%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\cpp\solve.cpp" <nul >nul 2>nul
+"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Run C++ template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\cpp\solve.cpp"
 if errorlevel 1 goto verify_failed
-echo [%ESC%[38;5;183mVERIFY%ESC%[0m] Run Java template
-"%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\java\solve.java" <nul >nul 2>nul
+"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Run Java template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\java\solve.java"
 if errorlevel 1 goto verify_failed
-echo [%ESC%[38;5;183mVERIFY%ESC%[0m] Run Python template
-"%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\python\solve.py" <nul >nul 2>nul
+"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Run Python template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\python\solve.py"
 if errorlevel 1 goto verify_failed
-echo [%ESC%[38;5;183mVERIFY%ESC%[0m] Expand C++ template
-"%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
+"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Expand C++ template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\cpp\solve.cpp"
 if errorlevel 1 goto verify_failed
-echo [%ESC%[38;5;183mVERIFY%ESC%[0m] Expand Java template
-"%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\java\solve.java" >nul 2>nul
+"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Expand Java template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\java\solve.java"
 if errorlevel 1 goto verify_failed
-echo [%ESC%[38;5;183mVERIFY%ESC%[0m] Expand Python template
-"%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\python\solve.py" >nul 2>nul
+"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Expand Python template" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\python\solve.py"
 if errorlevel 1 goto verify_failed
-echo [%ESC%[38;5;183mVERIFY%ESC%[0m] Compile expanded C++
-g++ -std=c++20 -O2 "%ROOT%\template\cpp\submit.cpp" -o "%TEMP%\cp_submit_test.exe"
+"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Compile expanded C++" --cwd "%ROOT%" --stdin-empty -- g++ -std=c++20 -O2 "%ROOT%\template\cpp\submit.cpp" -o "%TEMP%\cp_submit_test.exe"
 if errorlevel 1 goto verify_failed
-echo [%ESC%[38;5;183mVERIFY%ESC%[0m] Compile expanded Java
-javac -encoding UTF-8 -d "%TEMP%" "%ROOT%\template\java\submit.java"
+"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Compile expanded Java" --cwd "%ROOT%" --stdin-empty -- javac -encoding UTF-8 -d "%TEMP%" "%ROOT%\template\java\submit.java"
 if errorlevel 1 goto verify_failed
-echo [%ESC%[38;5;183mVERIFY%ESC%[0m] Parse expanded Python
-"%CP_PYTHON%" -c "import ast, pathlib; ast.parse(pathlib.Path(r'%ROOT%\template\python\submit.py').read_text())"
+"%CP_PYTHON%" "%ROOT%\scripts\helpers\spinner.py" --label "Parse expanded Python" --cwd "%ROOT%" --stdin-empty -- "%CP_PYTHON%" -c "import ast, pathlib; ast.parse(pathlib.Path(r'%ROOT%\template\python\submit.py').read_text())"
 if errorlevel 1 goto verify_failed
 
 call :cleanup_verify

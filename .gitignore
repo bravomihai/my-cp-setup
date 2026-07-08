@@ -34,6 +34,3 @@ Thumbs.db
 .vscode/*.code-workspace
 /.vscode/
 /.clangd
-
-# generated local configuration
-/cmd/cmd_macros.local.txt

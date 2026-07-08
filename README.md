@@ -41,8 +41,9 @@ The installer also:
 
 - adds known tool directories to the user `Path`
 - sets `XDG_CONFIG_HOME` to the repository root
+- sets `CP_SETUP_ROOT` to the repository root
 - sets `CP_PYTHON` to the real Python executable used by the setup
-- configures CMD DOSKEY macros from `cmd\cmd_macros.txt`
+- configures CMD DOSKEY macros from `cmd\cp_macros`
 - initializes the `ac-library` submodule
 - verifies C++, Java, Python, and expansion for all three languages
 
@@ -54,7 +55,7 @@ External tools are not stored in this repository.
 my-cp-setup
 |-- ac-library/              AtCoder Library submodule
 |-- cmd/
-|   `-- cmd_macros.txt       CMD DOSKEY macros
+|   `-- cp_macros            CMD DOSKEY macros
 |-- libraries/
 |   |-- cpp/
 |   |   `-- my_libraries/
@@ -70,12 +71,9 @@ my-cp-setup
 |-- scripts/
 |   |-- debug_cpp.bat        Compile C++ with debug symbols and run gdb
 |   |-- expand.py            Generate submit.cpp/submit.java/submit.py
-|   |-- find_python.ps1      Resolve a real Python executable
 |   |-- install.bat          Windows installer
-|   |-- install_cmd_macros.bat
-|   |-- install_msys2_toolchain.ps1
-|   `-- install_paths.ps1
-|   `-- run.py               Run C++/Java/Python files
+|   |-- run.py               Run C++/Java/Python files
+|   `-- helpers/             Installer helper scripts
 |-- template/
 |   |-- cpp/solve.cpp
 |   |-- java/solve.java
@@ -135,25 +133,11 @@ scripts\debug_cpp.bat template\cpp\solve.cpp
 Install macro loading:
 
 ```bat
-scripts\install_cmd_macros.bat
-```
-
-Available macros:
-
-```text
-cp
-cpsetup
-solve_cpp
-solve_java
-solve_py
-input
-run
-expand
-debug
+scripts\helpers\install_cmd_macros.bat
 ```
 
 New `cmd.exe` windows load these automatically after install.
-The `run` and `expand` macros use `CP_PYTHON`, so they do not depend on the `python.exe` Microsoft Store alias.
+The `run` and `expand` macros use `CP_PYTHON`, so they do not depend on the `python.exe` Microsoft Store alias. See `cmd\cp_macros` for the current macro list.
 
 ## Neovim
 

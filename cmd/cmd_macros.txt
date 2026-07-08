@@ -1,9 +1,0 @@
-cp=cd /d __ROOT__
-cpsetup=cd /d __ROOT__
-solve_cpp=nvim __ROOT__\template\cpp\solve.cpp
-solve_java=nvim __ROOT__\template\java\solve.java
-solve_py=nvim __ROOT__\template\python\solve.py
-input=cd /d __ROOT__ && nvim input.txt
-run="__PYTHON__" "__ROOT__\scripts\run.py" $*
-expand="__PYTHON__" "__ROOT__\scripts\expand.py" $*
-debug=__ROOT__\scripts\debug_cpp.bat $*
