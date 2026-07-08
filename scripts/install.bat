@@ -67,6 +67,7 @@ if exist "%ROOT%\.git" (
     if errorlevel 1 goto failed
 )
 
+echo Verifying setup...
 call :verify
 if errorlevel 1 goto failed
 

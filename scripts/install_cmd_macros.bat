@@ -37,3 +37,4 @@ echo Installed DOSKEY macros from:
 echo %MACROS%
 echo.
 echo New cmd.exe windows will load them automatically.
+exit /b 0
