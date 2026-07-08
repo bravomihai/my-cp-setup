@@ -27,12 +27,8 @@ def open_new_cmd(source: Path) -> int:
         print("--new-cmd is only supported on Windows.", file=sys.stderr)
         return 1
 
-    command = [
-        "cmd",
-        "/k",
-        f'cd /d "{source.parent}" && {list2cmdline([sys.executable, str(Path(__file__).resolve()), str(source)])}',
-    ]
-    subprocess.Popen(["cmd", "/c", "start", "", *command])
+    run_command_line = list2cmdline([sys.executable, str(Path(__file__).resolve()), str(source)])
+    subprocess.Popen(["cmd", "/c", "start", "", "/D", str(source.parent), "cmd", "/k", run_command_line])
     return 0
 
 
