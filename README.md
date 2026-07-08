@@ -21,7 +21,7 @@ scripts\install.bat --check
 If you cloned without submodules:
 
 ```bat
-git submodule update --init ac-library
+git submodule update --init libraries/ac-library
 scripts\install.bat
 ```
 
@@ -53,8 +53,8 @@ External tools are not stored in this repository.
 
 ```text
 my-cp-setup
-|-- ac-library/              AtCoder Library submodule
 |-- libraries/
+|   |-- ac-library/          AtCoder Library submodule
 |   |-- cpp/
 |   |   `-- my_libraries/
 |   |       |-- cp.hpp       C++ helpers
@@ -155,7 +155,7 @@ Neovim then loads the `nvim` folder inside that repository:
 ```text
 -std=c++20
 -I.
--Iac-library
+-Ilibraries/ac-library
 -Ilibraries/cpp
 ```
 

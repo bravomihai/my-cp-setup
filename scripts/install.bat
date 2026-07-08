@@ -66,7 +66,7 @@ if "%CHECK_ONLY%"=="0" (
 )
 
 if exist "%ROOT%\.git" (
-    git -C "%ROOT%" submodule update --init ac-library
+    git -C "%ROOT%" submodule update --init libraries/ac-library
     if errorlevel 1 goto failed
 )
 

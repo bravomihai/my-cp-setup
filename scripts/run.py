@@ -46,7 +46,7 @@ def run_cpp(source: Path, root: Path, input_path: Path | None) -> int:
         "-std=c++20",
         "-O2",
         f"-I{root / 'libraries' / 'cpp'}",
-        f"-I{root / 'ac-library'}",
+        f"-I{root / 'libraries' / 'ac-library'}",
         str(source),
         "-o",
         str(exe),

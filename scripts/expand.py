@@ -39,7 +39,7 @@ def copy_to_clipboard(path: Path) -> None:
 def expand_cpp(source: Path, root: Path) -> Path:
     debug_lib = root / "libraries" / "cpp" / "my_libraries" / "debug.cpp"
     cp_lib = root / "libraries" / "cpp" / "my_libraries" / "cp.hpp"
-    acl = root / "ac-library"
+    acl = root / "libraries" / "ac-library"
     expander = acl / "expander.py"
 
     for path in (debug_lib, cp_lib, expander):
