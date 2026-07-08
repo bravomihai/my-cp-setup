@@ -4,11 +4,11 @@ Personal competitive programming setup for Windows 11, with C++, Java, Python, N
 
 ## Quick Install
 
-Clone to the expected location and run the installer:
+Clone anywhere you have write access and run the installer from the repository root:
 
 ```bat
-git clone --recursive https://github.com/bravomihai/my-cp-setup.git D:\coding\cp
-cd /d D:\coding\cp
+git clone --recursive https://github.com/bravomihai/my-cp-setup.git my-cp-setup
+cd /d my-cp-setup
 scripts\install.bat
 ```
 
@@ -67,12 +67,12 @@ my-cp-setup
 |           `-- cp.py        Python helpers
 |-- nvim/                    Neovim configuration
 |-- scripts/
-|   |-- build_run.bat        Run C++/Java/Python files
 |   |-- debug_cpp.bat        Compile C++ with debug symbols and run gdb
 |   |-- expand.py            Generate submit.cpp/submit.java/submit.py
 |   |-- install.bat          Windows installer
 |   |-- install_cmd_macros.bat
 |   `-- install_paths.ps1
+|   `-- run.py               Run C++/Java/Python files
 |-- template/
 |   |-- cpp/solve.cpp
 |   |-- java/solve.java
@@ -96,9 +96,9 @@ The runner compiles when needed and chooses input in this order:
 Examples:
 
 ```bat
-scripts\build_run.bat template\cpp\solve.cpp
-scripts\build_run.bat template\java\solve.java
-scripts\build_run.bat template\python\solve.py
+python scripts\run.py template\cpp\solve.cpp
+python scripts\run.py template\java\solve.java
+python scripts\run.py template\python\solve.py
 ```
 
 ## Expand C++
@@ -153,21 +153,21 @@ New `cmd.exe` windows load these automatically after install.
 
 ## Neovim
 
-The installer sets:
+The installer sets `XDG_CONFIG_HOME` to the repository root. For example, if the repo was cloned to `C:\Users\mihai\my-cp-setup`, it sets:
 
 ```text
-XDG_CONFIG_HOME=D:\coding\cp
+XDG_CONFIG_HOME=C:\Users\mihai\my-cp-setup
 ```
 
-Neovim then loads:
+Neovim then loads the `nvim` folder inside that repository:
 
 ```text
-D:\coding\cp\nvim
+<repo-root>\nvim
 ```
 
 ## VS Code
 
-The `vscode` directory contains tasks/settings that can be copied or symlinked into `.vscode` if desired. The main runner is `scripts\build_run.bat`.
+The `vscode` directory contains optional tasks/settings that can be copied or symlinked into `.vscode` if desired. The main runner is `scripts\run.py`.
 
 ## Language Server
 

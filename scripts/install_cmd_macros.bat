@@ -2,10 +2,17 @@
 setlocal
 
 for %%I in ("%~dp0..") do set "ROOT=%%~fI"
-set "MACROS=%ROOT%\cmd\cmd_macros.txt"
+set "TEMPLATE=%ROOT%\cmd\cmd_macros.txt"
+set "MACROS=%ROOT%\cmd\cmd_macros.local.txt"
 
-if not exist "%MACROS%" (
-    echo Macro file not found: %MACROS%
+if not exist "%TEMPLATE%" (
+    echo Macro template not found: %TEMPLATE%
+    exit /b 1
+)
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root = '%ROOT%'; (Get-Content -Raw -LiteralPath '%TEMPLATE%').Replace('__ROOT__', $root) | Set-Content -LiteralPath '%MACROS%' -NoNewline"
+if errorlevel 1 (
+    echo Failed to generate macro file.
     exit /b 1
 )
 

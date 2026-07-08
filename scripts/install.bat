@@ -119,11 +119,11 @@ where python >nul 2>nul || exit /b 1
 where javac >nul 2>nul || exit /b 1
 where g++ >nul 2>nul || exit /b 1
 
-cmd /d /c call "%ROOT%\scripts\build_run.bat" __run "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
+python "%ROOT%\scripts\run.py" "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
 if errorlevel 1 exit /b 1
-cmd /d /c call "%ROOT%\scripts\build_run.bat" __run "%ROOT%\template\java\solve.java" >nul 2>nul
+python "%ROOT%\scripts\run.py" "%ROOT%\template\java\solve.java" >nul 2>nul
 if errorlevel 1 exit /b 1
-cmd /d /c call "%ROOT%\scripts\build_run.bat" __run "%ROOT%\template\python\solve.py" >nul 2>nul
+python "%ROOT%\scripts\run.py" "%ROOT%\template\python\solve.py" >nul 2>nul
 if errorlevel 1 exit /b 1
 python "%ROOT%\scripts\expand.py" "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
 if errorlevel 1 exit /b 1

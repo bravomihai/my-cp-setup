@@ -22,13 +22,18 @@ def failed(message: str) -> None:
 def copy_to_clipboard(path: Path) -> None:
     clip = shutil.which("clip")
     if clip is None:
-        raise RuntimeError("clip.exe not found")
+        print("[WARN] clip.exe not found; submit file was not copied to clipboard.", file=sys.stderr)
+        return
 
-    subprocess.run(
-        [clip],
-        input=b"\xff\xfe" + path.read_text(encoding="utf-8").encode("utf-16le"),
-        check=True,
-    )
+    try:
+        subprocess.run(
+            [clip],
+            input=b"\xff\xfe" + path.read_text(encoding="utf-8").encode("utf-16le"),
+            check=True,
+            stderr=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError:
+        print("[WARN] Clipboard copy failed; submit file was generated.", file=sys.stderr)
 
 
 def expand_cpp(source: Path, root: Path) -> Path:
