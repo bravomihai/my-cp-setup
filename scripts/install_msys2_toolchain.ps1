@@ -30,7 +30,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "pacman system update failed."
 }
 
-& $shell -mingw64 -defterm -no-start -here -c "pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra"
+& $shell -mingw64 -defterm -no-start -here -c "pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python"
 if ($LASTEXITCODE -ne 0) {
     throw "pacman toolchain install failed."
 }

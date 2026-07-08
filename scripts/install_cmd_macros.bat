@@ -10,7 +10,16 @@ if not exist "%TEMPLATE%" (
     exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$root = '%ROOT%'; (Get-Content -Raw -LiteralPath '%TEMPLATE%').Replace('__ROOT__', $root) | Set-Content -LiteralPath '%MACROS%' -NoNewline"
+if not defined CP_PYTHON (
+    for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\find_python.ps1"`) do set "CP_PYTHON=%%P"
+)
+
+if not defined CP_PYTHON (
+    echo Could not find a usable Python executable.
+    exit /b 1
+)
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root = '%ROOT%'; $python = '%CP_PYTHON%'; (Get-Content -Raw -LiteralPath '%TEMPLATE%').Replace('__ROOT__', $root).Replace('__PYTHON__', $python) | Set-Content -LiteralPath '%MACROS%' -NoNewline"
 if errorlevel 1 (
     echo Failed to generate macro file.
     exit /b 1

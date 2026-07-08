@@ -102,7 +102,7 @@ def run_python(source: Path, root: Path, input_path: Path | None) -> int:
     python_path = str(root / "libraries" / "python")
     env["PYTHONPATH"] = python_path + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
 
-    code = run_command(["python", str(source)], source.parent, input_path, env)
+    code = run_command([sys.executable, str(source)], source.parent, input_path, env)
     if code != 0:
         failed("FAILED")
         return code

@@ -8,13 +8,14 @@ vim.keymap.set("i", "jj", "<Esc>")
 
 local setup_root = vim.fn.fnamemodify(vim.fn.stdpath("config"), ":h")
 local scripts_dir = setup_root .. "\\scripts\\"
+local python = vim.env.CP_PYTHON or "python"
 
 -- compile & run
 vim.keymap.set("n", "<leader>r", function()
   vim.cmd("w")
   local file = vim.fn.expand("%:p")
   local runner = scripts_dir .. "run.py"
-  local out = vim.fn.system({ "python", runner, file })
+  local out = vim.fn.system({ python, runner, file })
 
   if vim.v.shell_error ~= 0 then
     vim.notify(vim.trim(out), vim.log.levels.ERROR)
@@ -33,7 +34,7 @@ vim.keymap.set("n", "<leader>e", function()
   end
 
   local expander = scripts_dir .. "expand.py"
-  local out = vim.fn.system({ "python", expander, file })
+  local out = vim.fn.system({ python, expander, file })
 
   if vim.v.shell_error ~= 0 then
     vim.notify(vim.trim(out), vim.log.levels.ERROR)

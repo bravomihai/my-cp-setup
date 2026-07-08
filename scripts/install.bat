@@ -15,8 +15,6 @@ call :need_or_install git Git.Git "Git"
 if errorlevel 1 goto failed
 call :need_or_install nvim Neovim.Neovim "Neovim"
 if errorlevel 1 goto failed
-call :need_or_install python Python.Python.3.12 "Python 3"
-if errorlevel 1 goto failed
 call :need_or_install javac EclipseAdoptium.Temurin.21.JDK "JDK"
 if errorlevel 1 goto failed
 
@@ -26,14 +24,7 @@ if not errorlevel 1 (
 ) else (
     echo [%ESC%[33mMISSING%ESC%[0m] g++
     if "%CHECK_ONLY%"=="0" (
-        where winget >nul 2>nul
-        if errorlevel 1 (
-            echo [%ESC%[31mFAILED%ESC%[0m] winget is required to install MSYS2 automatically.
-            goto failed
-        )
-        winget install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements
-        if errorlevel 1 goto failed
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\install_msys2_toolchain.ps1"
+        call :install_msys2_toolchain
         if errorlevel 1 goto failed
     )
 )
@@ -46,8 +37,23 @@ if "%CHECK_ONLY%"=="1" (
 if errorlevel 1 goto failed
 call :refresh_path
 
+call :find_python
+if errorlevel 1 (
+    echo [%ESC%[33mMISSING%ESC%[0m] Python 3
+    if "%CHECK_ONLY%"=="1" goto failed
+
+    call :install_msys2_toolchain
+    if errorlevel 1 goto failed
+    call :refresh_path
+    call :find_python
+    if errorlevel 1 goto failed
+)
+echo [%ESC%[32mOK%ESC%[0m] Python found: %CP_PYTHON%
+
 if "%CHECK_ONLY%"=="0" (
     powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('XDG_CONFIG_HOME', '%ROOT%', 'User')"
+    if errorlevel 1 goto failed
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('CP_PYTHON', '%CP_PYTHON%', 'User')"
     if errorlevel 1 goto failed
 
     call "%ROOT%\scripts\install_cmd_macros.bat"
@@ -88,35 +94,53 @@ if errorlevel 1 (
 winget install --id %~2 --exact --accept-package-agreements --accept-source-agreements
 exit /b %ERRORLEVEL%
 
+:install_msys2_toolchain
+where winget >nul 2>nul
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] winget is required to install MSYS2 automatically.
+    exit /b 1
+)
+winget install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements
+if errorlevel 1 exit /b %ERRORLEVEL%
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\install_msys2_toolchain.ps1"
+exit /b %ERRORLEVEL%
+
 :refresh_path
 for /F "usebackq tokens=* delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"`) do set "PATH=%%P"
 exit /b 0
+
+:find_python
+set "CP_PYTHON="
+for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\find_python.ps1"`) do set "CP_PYTHON=%%P"
+if defined CP_PYTHON exit /b 0
+exit /b 1
 
 :verify
 call :refresh_path
 where git >nul 2>nul || exit /b 1
 where nvim >nul 2>nul || exit /b 1
-where python >nul 2>nul || exit /b 1
+if not defined CP_PYTHON call :find_python
+if not defined CP_PYTHON exit /b 1
 where javac >nul 2>nul || exit /b 1
 where g++ >nul 2>nul || exit /b 1
 
-python "%ROOT%\scripts\run.py" "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
+"%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
 if errorlevel 1 exit /b 1
-python "%ROOT%\scripts\run.py" "%ROOT%\template\java\solve.java" >nul 2>nul
+"%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\java\solve.java" >nul 2>nul
 if errorlevel 1 exit /b 1
-python "%ROOT%\scripts\run.py" "%ROOT%\template\python\solve.py" >nul 2>nul
+"%CP_PYTHON%" "%ROOT%\scripts\run.py" "%ROOT%\template\python\solve.py" >nul 2>nul
 if errorlevel 1 exit /b 1
-python "%ROOT%\scripts\expand.py" "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
+"%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\cpp\solve.cpp" >nul 2>nul
 if errorlevel 1 exit /b 1
-python "%ROOT%\scripts\expand.py" "%ROOT%\template\java\solve.java" >nul 2>nul
+"%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\java\solve.java" >nul 2>nul
 if errorlevel 1 exit /b 1
-python "%ROOT%\scripts\expand.py" "%ROOT%\template\python\solve.py" >nul 2>nul
+"%CP_PYTHON%" "%ROOT%\scripts\expand.py" "%ROOT%\template\python\solve.py" >nul 2>nul
 if errorlevel 1 exit /b 1
 g++ -std=c++20 -O2 "%ROOT%\template\cpp\submit.cpp" -o "%TEMP%\cp_submit_test.exe"
 if errorlevel 1 exit /b 1
 javac -encoding UTF-8 -d "%TEMP%" "%ROOT%\template\java\submit.java"
 if errorlevel 1 exit /b 1
-python -c "import ast, pathlib; ast.parse(pathlib.Path(r'%ROOT%\template\python\submit.py').read_text())"
+"%CP_PYTHON%" -c "import ast, pathlib; ast.parse(pathlib.Path(r'%ROOT%\template\python\submit.py').read_text())"
 if errorlevel 1 exit /b 1
 
 del "%ROOT%\template\cpp\submit.cpp" >nul 2>nul

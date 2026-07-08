@@ -31,19 +31,20 @@ scripts\install.bat
 
 - `git`
 - `nvim`
-- `python`
 - `javac`
 - `g++`
+- usable Python 3, preferring MSYS2 Python and ignoring the Microsoft Store `WindowsApps` alias
 
-If a tool is missing, it tries to install it with `winget`. For C++, it installs MSYS2 externally and installs the needed toolchain with `pacman`.
+If a tool is missing, it tries to install it with `winget`. For C++ and Python, it installs MSYS2 externally and installs only the CP toolchain with `pacman`: GCC, GDB, clang tools, and Python.
 
 The installer also:
 
 - adds known tool directories to the user `Path`
 - sets `XDG_CONFIG_HOME` to the repository root
+- sets `CP_PYTHON` to the real Python executable used by the setup
 - configures CMD DOSKEY macros from `cmd\cmd_macros.txt`
 - initializes the `ac-library` submodule
-- verifies C++, Java, Python, and C++ expansion
+- verifies C++, Java, Python, and expansion for all three languages
 
 External tools are not stored in this repository.
 
@@ -69,8 +70,10 @@ my-cp-setup
 |-- scripts/
 |   |-- debug_cpp.bat        Compile C++ with debug symbols and run gdb
 |   |-- expand.py            Generate submit.cpp/submit.java/submit.py
+|   |-- find_python.ps1      Resolve a real Python executable
 |   |-- install.bat          Windows installer
 |   |-- install_cmd_macros.bat
+|   |-- install_msys2_toolchain.ps1
 |   `-- install_paths.ps1
 |   `-- run.py               Run C++/Java/Python files
 |-- template/
@@ -96,19 +99,19 @@ The runner compiles when needed and chooses input in this order:
 Examples:
 
 ```bat
-python scripts\run.py template\cpp\solve.cpp
-python scripts\run.py template\java\solve.java
-python scripts\run.py template\python\solve.py
+"%CP_PYTHON%" scripts\run.py template\cpp\solve.cpp
+"%CP_PYTHON%" scripts\run.py template\java\solve.java
+"%CP_PYTHON%" scripts\run.py template\python\solve.py
 ```
 
-## Expand C++
+## Expand
 
 Generate a standalone submit file and copy it to the clipboard:
 
 ```bat
-python scripts\expand.py template\cpp\solve.cpp
-python scripts\expand.py template\java\solve.java
-python scripts\expand.py template\python\solve.py
+"%CP_PYTHON%" scripts\expand.py template\cpp\solve.cpp
+"%CP_PYTHON%" scripts\expand.py template\java\solve.java
+"%CP_PYTHON%" scripts\expand.py template\python\solve.py
 ```
 
 On success it prints one of:
@@ -150,6 +153,7 @@ debug
 ```
 
 New `cmd.exe` windows load these automatically after install.
+The `run` and `expand` macros use `CP_PYTHON`, so they do not depend on the `python.exe` Microsoft Store alias.
 
 ## Neovim
 
