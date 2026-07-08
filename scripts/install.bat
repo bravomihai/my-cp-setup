@@ -41,7 +41,7 @@ if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] g++ was installed, but g++.exe was not found in known MSYS2 paths.
     goto failed
 )
-echo [%ESC%[32mOK%ESC%[0m] g++ found: %CP_GPP%
+echo [%ESC%[32mOK%ESC%[0m] g++ found
 
 call :find_python
 if errorlevel 1 (
