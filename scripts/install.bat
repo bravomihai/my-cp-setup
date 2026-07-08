@@ -129,11 +129,12 @@ if "%CHECK_ONLY%"=="1" (
 call :require_winget
 if errorlevel 1 exit /b 1
 
-echo [%ESC%[38;5;183mINSTALL%ESC%[0m] %~3 via winget: %~2
 if "%VERBOSE%"=="1" (
+    echo [%ESC%[38;5;183mINSTALL%ESC%[0m] %~3 via winget: %~2
     "%WINGET%" install --id %~2 --exact --accept-package-agreements --accept-source-agreements
 ) else (
-    "%WINGET%" install --id %~2 --exact --accept-package-agreements --accept-source-agreements >"%TEMP%\cp_setup_winget.log" 2>&1
+    set "INSTALL_CMD=""%WINGET%"" install --id %~2 --exact --accept-package-agreements --accept-source-agreements"
+    call :run_install_spinner "%~3 via winget: %~2" "" "%TEMP%\cp_setup_winget.log"
 )
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for %~3.
@@ -160,28 +161,37 @@ exit /b 1
 :install_msys2_toolchain
 call :require_winget
 if errorlevel 1 exit /b 1
-echo [%ESC%[38;5;183mINSTALL%ESC%[0m] MSYS2 via winget: MSYS2.MSYS2
 if "%VERBOSE%"=="1" (
+    echo [%ESC%[38;5;183mINSTALL%ESC%[0m] MSYS2 via winget: MSYS2.MSYS2
     "%WINGET%" install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements
 ) else (
-    "%WINGET%" install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements >"%TEMP%\cp_setup_winget.log" 2>&1
+    set "INSTALL_CMD=""%WINGET%"" install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements"
+    call :run_install_spinner "MSYS2 via winget: MSYS2.MSYS2" "" "%TEMP%\cp_setup_winget.log"
 )
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for MSYS2.
     if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
     exit /b 1
 )
-echo [%ESC%[38;5;183mINSTALL%ESC%[0m] MSYS2 toolchain via pacman
 if "%VERBOSE%"=="1" (
+    echo [%ESC%[38;5;183mINSTALL%ESC%[0m] MSYS2 toolchain via pacman
     powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -Syu --noconfirm'; if ($LASTEXITCODE -ne 0) { throw 'pacman system update failed.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }"
 ) else (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -Syu --noconfirm'; if ($LASTEXITCODE -ne 0) { throw 'pacman system update failed.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }" >"%TEMP%\cp_setup_pacman.log" 2>&1
+    set "INSTALL_CMD=powershell -NoProfile -ExecutionPolicy Bypass -Command ^"$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -Syu --noconfirm'; if ($LASTEXITCODE -ne 0) { throw 'pacman system update failed.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }^""
+    call :run_install_spinner "MSYS2 toolchain via pacman" "this may take a while" "%TEMP%\cp_setup_pacman.log"
 )
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] pacman toolchain install failed.
     if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_pacman.log
     exit /b 1
 )
+exit /b %ERRORLEVEL%
+
+:run_install_spinner
+set "SPIN_LABEL=%~1"
+set "SPIN_HINT=%~2"
+set "SPIN_LOG=%~3"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$label=$env:SPIN_LABEL; $hint=$env:SPIN_HINT; $log=$env:SPIN_LOG; $cmd=$env:INSTALL_CMD; $err=$log + '.err'; Remove-Item -LiteralPath $log,$err -ErrorAction SilentlyContinue; $p=Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/c',$cmd) -RedirectStandardOutput $log -RedirectStandardError $err -PassThru -WindowStyle Hidden; $frames=@([char]92,'-','/','|'); $i=0; while (-not $p.HasExited) { $text='[INSTALL] ' + $frames[$i %% $frames.Count] + ' ' + $label; if ($hint) { $text += ' (' + $hint + ')' }; Write-Host -NoNewline (\"`r\" + $text); Start-Sleep -Milliseconds 100; $i++ }; if (Test-Path -LiteralPath $err) { Get-Content -LiteralPath $err -ErrorAction SilentlyContinue | Add-Content -LiteralPath $log; Remove-Item -LiteralPath $err -ErrorAction SilentlyContinue }; if ($p.ExitCode -eq 0) { Write-Host (\"`r[INSTALL] \" + $label); exit 0 }; Write-Host (\"`r[INSTALL] failed \" + $label); exit $p.ExitCode"
 exit /b %ERRORLEVEL%
 
 :install_paths
