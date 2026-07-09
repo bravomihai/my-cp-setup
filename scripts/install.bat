@@ -32,6 +32,7 @@ if "%CHECK_ONLY%"=="0" (
     if errorlevel 2 exit /b 0
     if errorlevel 1 goto failed
 )
+call :enable_ansi
 
 echo CP setup root:
 echo %ROOT%
@@ -130,6 +131,11 @@ echo [%ESC%[32mDONE%ESC%[0m] CP setup is ready.
 echo Restart terminals so updated User PATH and XDG_CONFIG_HOME are visible everywhere.
 exit /b 0
 
+:enable_ansi
+reg add HKCU\Console /v VirtualTerminalLevel /t REG_DWORD /d 1 /f >nul 2>nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -Namespace Native -Name Console -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern System.IntPtr GetStdHandle(int nStdHandle); [DllImport(\"kernel32.dll\")] public static extern bool GetConsoleMode(System.IntPtr hConsoleHandle, out int lpMode); [DllImport(\"kernel32.dll\")] public static extern bool SetConsoleMode(System.IntPtr hConsoleHandle, int dwMode);'; $h=[Native.Console]::GetStdHandle(-11); $mode=0; if ([Native.Console]::GetConsoleMode($h,[ref]$mode)) { [Native.Console]::SetConsoleMode($h,$mode -bor 4) | Out-Null }" >nul 2>nul
+exit /b 0
+
 :ensure_admin
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$id=[Security.Principal.WindowsIdentity]::GetCurrent(); $principal=[Security.Principal.WindowsPrincipal]::new($id); if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { exit 0 }; exit 1"
 if not errorlevel 1 exit /b 0
@@ -138,7 +144,7 @@ set "ELEVATE_PS=%TEMP%\cp_setup_elevate_%RANDOM%_%RANDOM%.ps1"
 set "ELEVATE_LOG=%TEMP%\cp_setup_elevate.log"
 set "CP_INSTALL_SCRIPT=%~f0"
 set "CP_INSTALL_ARGS=%ORIGINAL_ARGS%"
-set "CP_INSTALL_CWD=%CD%"
+set "CP_INSTALL_CWD=%ROOT%"
 > "%ELEVATE_PS%" echo $ErrorActionPreference = 'Stop'
 >> "%ELEVATE_PS%" echo $label = 'Requesting administrator rights'
 >> "%ELEVATE_PS%" echo $log = $env:ELEVATE_LOG
@@ -147,7 +153,7 @@ set "CP_INSTALL_CWD=%CD%"
 >> "%ELEVATE_PS%" echo $clear = $esc + '[2K'
 >> "%ELEVATE_PS%" echo $install = '[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'
 >> "%ELEVATE_PS%" echo Remove-Item -LiteralPath $log -ErrorAction SilentlyContinue
->> "%ELEVATE_PS%" echo $cmd = '"' + $env:CP_INSTALL_SCRIPT + '" ' + $env:CP_INSTALL_ARGS
+>> "%ELEVATE_PS%" echo $cmd = 'cd /d "' + $env:CP_INSTALL_CWD + '" ^&^& "' + $env:CP_INSTALL_SCRIPT + '" ' + $env:CP_INSTALL_ARGS
 >> "%ELEVATE_PS%" echo $job = Start-Job -ScriptBlock { param($comspec,$cmd,$cwd,$log) try { Start-Process -FilePath $comspec -ArgumentList @('/d','/k',$cmd) -WorkingDirectory $cwd -Verb RunAs; 0 } catch { $_ ^| Out-String ^| Set-Content -LiteralPath $log; 1 } } -ArgumentList $env:ComSpec,$cmd,$env:CP_INSTALL_CWD,$log
 >> "%ELEVATE_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%ELEVATE_PS%" echo $i = 0
@@ -286,6 +292,7 @@ set "SPIN_PS=%TEMP%\cp_setup_pacman_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $cr = [char]13
 >> "%SPIN_PS%" echo $clear = $esc + '[2K'
 >> "%SPIN_PS%" echo $install = '[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'
+>> "%SPIN_PS%" echo $installed = '[' + $esc + '[38;5;114mINSTALLED' + $esc + '[0m]'
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $log,$wrapper -ErrorAction SilentlyContinue
 >> "%SPIN_PS%" echo $shell = $null
 >> "%SPIN_PS%" echo foreach ($path in @('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd')) { if (Test-Path -LiteralPath $path) { $shell = $path; break } }
@@ -306,8 +313,7 @@ set "SPIN_PS=%TEMP%\cp_setup_pacman_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $jobItems = @($jobResult)
 >> "%SPIN_PS%" echo if ($jobItems.Count -eq 0) { $exitCode = 1 } else { $exitCode = [int]$jobItems[-1] }
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue
->> "%SPIN_PS%" echo if ($exitCode -eq 0) { $result = 'OK' } else { $result = 'FAILED' }
->> "%SPIN_PS%" echo Write-Host ($cr + $clear + $install + ' ' + $result + ' ' + $label)
+>> "%SPIN_PS%" echo if ($exitCode -eq 0) { Write-Host ($cr + $clear + $installed + ' ' + $label) } else { Write-Host ($cr + $clear + '[' + $esc + '[31mFAILED' + $esc + '[0m] ' + $label) }
 >> "%SPIN_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SPIN_PS%"
 set "SPIN_EXIT=%ERRORLEVEL%"
@@ -330,6 +336,7 @@ set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $cr = [char]13
 >> "%SPIN_PS%" echo $clear = $esc + '[2K'
 >> "%SPIN_PS%" echo $install = '[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'
+>> "%SPIN_PS%" echo $installed = '[' + $esc + '[38;5;114mINSTALLED' + $esc + '[0m]'
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $log,$wrapper -ErrorAction SilentlyContinue
 >> "%SPIN_PS%" echo $runLine = [string]('call ' + $cmd + ' 1^>' + $q + $log + $q + ' 2^>^&1')
 >> "%SPIN_PS%" echo $lines = @('@echo off',$runLine,'exit /b %%ERRORLEVEL%%')
@@ -343,8 +350,7 @@ set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $jobItems = @($jobResult)
 >> "%SPIN_PS%" echo if ($jobItems.Count -eq 0) { $exitCode = 1 } else { $exitCode = [int]$jobItems[-1] }
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue
->> "%SPIN_PS%" echo if ($exitCode -eq 0) { $result = 'OK' } else { $result = 'FAILED' }
->> "%SPIN_PS%" echo Write-Host ($cr + $clear + $install + ' ' + $result + ' ' + $label)
+>> "%SPIN_PS%" echo if ($exitCode -eq 0) { Write-Host ($cr + $clear + $installed + ' ' + $label) } else { Write-Host ($cr + $clear + '[' + $esc + '[31mFAILED' + $esc + '[0m] ' + $label) }
 >> "%SPIN_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SPIN_PS%"
 set "SPIN_EXIT=%ERRORLEVEL%"
@@ -452,7 +458,7 @@ if not errorlevel 1 if exist "%ROOT%\.git" (
     if errorlevel 1 exit /b 1
 )
 
-echo [%ESC%[32mOK%ESC%[0m] Verification passed
+echo [%ESC%[38;5;114mVERIFIED%ESC%[0m] Verification passed
 exit /b 0
 
 :verify_failed
@@ -461,7 +467,7 @@ exit /b 1
 
 :ensure_spinner
 set "SPINNER_PY=%TEMP%\cp_setup_spinner_%RANDOM%_%RANDOM%.py"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$code=@('import argparse','import subprocess','import sys','import time','from pathlib import Path','','PURPLE = chr(27) + ''[38;5;183m''','RESET = chr(27) + ''[0m''','FRAMES = list(chr(92) + ''-/|'')','','def main() -> int:','    parser = argparse.ArgumentParser()','    parser.add_argument(''--label'', required=True)','    parser.add_argument(''--cwd'', default=str(Path.cwd()))','    parser.add_argument(''--stdin-empty'', action=''store_true'')','    parser.add_argument(''command'', nargs=argparse.REMAINDER)','    args = parser.parse_args()','    command = args.command[1:] if args.command and args.command[0] == ''--'' else args.command','    if not command:','        print(''spinner: missing command'', file=sys.stderr)','        return 1','    stdin = subprocess.DEVNULL if args.stdin_empty else None','    process = subprocess.Popen(command, cwd=args.cwd, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)','    index = 0','    while process.poll() is None:','        print(''\r[{}VERIFY{}] {} {}''.format(PURPLE, RESET, FRAMES[index %% len(FRAMES)], args.label), end='''', flush=True)','        time.sleep(0.1)','        index += 1','    stdout, stderr = process.communicate()','    if process.returncode == 0:','        print(''\r[{}VERIFY{}] OK {}     ''.format(PURPLE, RESET, args.label))','        return 0','    print(''\r[{}VERIFY{}] FAILED {}     ''.format(PURPLE, RESET, args.label), file=sys.stderr)','    if stderr:','        print(stderr, file=sys.stderr, end='''')','    if stdout:','        print(stdout, file=sys.stderr, end='''')','    return process.returncode','','if __name__ == ''__main__'':','    raise SystemExit(main())'); [IO.File]::WriteAllText('%SPINNER_PY%', ($code -join [Environment]::NewLine))"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$code=@('import argparse','import subprocess','import sys','import time','from pathlib import Path','','PURPLE = chr(27) + ''[38;5;183m''','GREEN = chr(27) + ''[38;5;114m''','RED = chr(27) + ''[31m''','RESET = chr(27) + ''[0m''','FRAMES = list(chr(92) + ''-/|'')','','def main() -> int:','    parser = argparse.ArgumentParser()','    parser.add_argument(''--label'', required=True)','    parser.add_argument(''--cwd'', default=str(Path.cwd()))','    parser.add_argument(''--stdin-empty'', action=''store_true'')','    parser.add_argument(''command'', nargs=argparse.REMAINDER)','    args = parser.parse_args()','    command = args.command[1:] if args.command and args.command[0] == ''--'' else args.command','    if not command:','        print(''spinner: missing command'', file=sys.stderr)','        return 1','    stdin = subprocess.DEVNULL if args.stdin_empty else None','    process = subprocess.Popen(command, cwd=args.cwd, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)','    index = 0','    while process.poll() is None:','        print(''\r[{}VERIFY{}] {} {}''.format(PURPLE, RESET, FRAMES[index %% len(FRAMES)], args.label), end='''', flush=True)','        time.sleep(0.1)','        index += 1','    stdout, stderr = process.communicate()','    if process.returncode == 0:','        print(''\r[{}VERIFIED{}] {}     ''.format(GREEN, RESET, args.label))','        return 0','    print(''\r[{}FAILED{}] {}     ''.format(RED, RESET, args.label), file=sys.stderr)','    if stderr:','        print(stderr, file=sys.stderr, end='''')','    if stdout:','        print(stdout, file=sys.stderr, end='''')','    return process.returncode','','if __name__ == ''__main__'':','    raise SystemExit(main())'); [IO.File]::WriteAllText('%SPINNER_PY%', ($code -join [Environment]::NewLine))"
 exit /b %ERRORLEVEL%
 
 :cleanup_verify
