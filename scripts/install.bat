@@ -478,7 +478,62 @@ exit /b 1
 
 :ensure_spinner
 set "SPINNER_PY=%TEMP%\cp_setup_spinner_%RANDOM%_%RANDOM%.py"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$code=@('import argparse','import subprocess','import sys','import time','from pathlib import Path','','PURPLE = chr(27) + ''[38;5;183m''','GREEN = chr(27) + ''[38;5;114m''','RED = chr(27) + ''[31m''','RESET = chr(27) + ''[0m''','FRAMES = list(chr(92) + ''-/|'')','','def main() -> int:','    parser = argparse.ArgumentParser()','    parser.add_argument(''--label'', required=True)','    parser.add_argument(''--cwd'', default=str(Path.cwd()))','    parser.add_argument(''--stdin-empty'', action=''store_true'')','    parser.add_argument(''command'', nargs=argparse.REMAINDER)','    args = parser.parse_args()','    command = args.command[1:] if args.command and args.command[0] == ''--'' else args.command','    if not command:','        print(''spinner: missing command'', file=sys.stderr)','        return 1','    stdin = subprocess.DEVNULL if args.stdin_empty else None','    process = subprocess.Popen(command, cwd=args.cwd, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)','    index = 0','    while process.poll() is None:','        print(''\r[{}VERIFY{}] {} {}''.format(PURPLE, RESET, FRAMES[index %% len(FRAMES)], args.label), end='''', flush=True)','        time.sleep(0.1)','        index += 1','    stdout, stderr = process.communicate()','    if process.returncode == 0:','        print(''\r[{}VERIFIED{}] {}     ''.format(GREEN, RESET, args.label))','        return 0','    print(''\r[{}FAILED{}] {}     ''.format(RED, RESET, args.label), file=sys.stderr)','    if stderr:','        print(stderr, file=sys.stderr, end='''')','    if stdout:','        print(stdout, file=sys.stderr, end='''')','    return process.returncode','','if __name__ == ''__main__'':','    raise SystemExit(main())'); [IO.File]::WriteAllText('%SPINNER_PY%', ($code -join [Environment]::NewLine))"
+> "%SPINNER_PY%" echo import argparse
+>> "%SPINNER_PY%" echo import ctypes
+>> "%SPINNER_PY%" echo import subprocess
+>> "%SPINNER_PY%" echo import sys
+>> "%SPINNER_PY%" echo import time
+>> "%SPINNER_PY%" echo from pathlib import Path
+>> "%SPINNER_PY%" echo.
+>> "%SPINNER_PY%" echo ESC = chr(27)
+>> "%SPINNER_PY%" echo PURPLE = ESC + "[38;5;183m"
+>> "%SPINNER_PY%" echo GREEN = ESC + "[38;5;114m"
+>> "%SPINNER_PY%" echo RED = ESC + "[31m"
+>> "%SPINNER_PY%" echo RESET = ESC + "[0m"
+>> "%SPINNER_PY%" echo CLEAR = ESC + "[2K"
+>> "%SPINNER_PY%" echo FRAMES = [chr(92), "-", "/", chr(124)]
+>> "%SPINNER_PY%" echo.
+>> "%SPINNER_PY%" echo def enable_ansi():
+>> "%SPINNER_PY%" echo     if not sys.platform == "win32":
+>> "%SPINNER_PY%" echo         return
+>> "%SPINNER_PY%" echo     kernel32 = ctypes.windll.kernel32
+>> "%SPINNER_PY%" echo     handle = kernel32.GetStdHandle(-11)
+>> "%SPINNER_PY%" echo     mode = ctypes.c_uint32()
+>> "%SPINNER_PY%" echo     if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+>> "%SPINNER_PY%" echo         kernel32.SetConsoleMode(handle, mode.value ^| 4)
+>> "%SPINNER_PY%" echo.
+>> "%SPINNER_PY%" echo def main() -^> int:
+>> "%SPINNER_PY%" echo     enable_ansi()
+>> "%SPINNER_PY%" echo     parser = argparse.ArgumentParser()
+>> "%SPINNER_PY%" echo     parser.add_argument("--label", required=True)
+>> "%SPINNER_PY%" echo     parser.add_argument("--cwd", default=str(Path.cwd()))
+>> "%SPINNER_PY%" echo     parser.add_argument("--stdin-empty", action="store_true")
+>> "%SPINNER_PY%" echo     parser.add_argument("command", nargs=argparse.REMAINDER)
+>> "%SPINNER_PY%" echo     args = parser.parse_args()
+>> "%SPINNER_PY%" echo     command = args.command[1:] if args.command and args.command[0] == "--" else args.command
+>> "%SPINNER_PY%" echo     if not command:
+>> "%SPINNER_PY%" echo         print("spinner: missing command", file=sys.stderr)
+>> "%SPINNER_PY%" echo         return 1
+>> "%SPINNER_PY%" echo     stdin = subprocess.DEVNULL if args.stdin_empty else None
+>> "%SPINNER_PY%" echo     process = subprocess.Popen(command, cwd=args.cwd, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+>> "%SPINNER_PY%" echo     index = 0
+>> "%SPINNER_PY%" echo     while process.poll() is None:
+>> "%SPINNER_PY%" echo         print("\r{}[{}VERIFY{}] {} {}".format(CLEAR, PURPLE, RESET, FRAMES[index %% len(FRAMES)], args.label), end="", flush=True)
+>> "%SPINNER_PY%" echo         time.sleep(0.1)
+>> "%SPINNER_PY%" echo         index += 1
+>> "%SPINNER_PY%" echo     stdout, stderr = process.communicate()
+>> "%SPINNER_PY%" echo     if process.returncode == 0:
+>> "%SPINNER_PY%" echo         print("\r{}[{}VERIFIED{}] {}".format(CLEAR, GREEN, RESET, args.label))
+>> "%SPINNER_PY%" echo         return 0
+>> "%SPINNER_PY%" echo     print("\r{}[{}FAILED{}] {}".format(CLEAR, RED, RESET, args.label), file=sys.stderr)
+>> "%SPINNER_PY%" echo     if stderr:
+>> "%SPINNER_PY%" echo         print(stderr, file=sys.stderr, end="")
+>> "%SPINNER_PY%" echo     if stdout:
+>> "%SPINNER_PY%" echo         print(stdout, file=sys.stderr, end="")
+>> "%SPINNER_PY%" echo     return process.returncode
+>> "%SPINNER_PY%" echo.
+>> "%SPINNER_PY%" echo if __name__ == "__main__":
+>> "%SPINNER_PY%" echo     raise SystemExit(main())
 exit /b %ERRORLEVEL%
 
 :cleanup_verify
