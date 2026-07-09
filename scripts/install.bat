@@ -162,6 +162,7 @@ set "CP_INSTALL_SCRIPT=%~f0"
 set "CP_INSTALL_ARGS=%ORIGINAL_ARGS%"
 set "CP_INSTALL_CWD=%ROOT%"
 > "%ELEVATE_CMD%" echo @echo off
+>> "%ELEVATE_CMD%" echo ^> "%ELEVATE_EXIT_FILE%" echo 900
 >> "%ELEVATE_CMD%" echo cd /d "%CP_INSTALL_CWD%"
 >> "%ELEVATE_CMD%" echo call "%CP_INSTALL_SCRIPT%" %CP_INSTALL_ARGS%
 >> "%ELEVATE_CMD%" echo set "CP_SETUP_EXIT=%%ERRORLEVEL%%"
@@ -184,7 +185,7 @@ set "CP_INSTALL_CWD=%ROOT%"
 >> "%ELEVATE_PS%" echo $startedFile = $env:ELEVATE_STARTED_FILE
 >> "%ELEVATE_PS%" echo Remove-Item -LiteralPath $log,$exitFile,$startedFile -ErrorAction SilentlyContinue
 >> "%ELEVATE_PS%" echo $cmdPath = $env:ELEVATE_CMD
->> "%ELEVATE_PS%" echo $job = Start-Job -ScriptBlock { param($comspec,$cmdPath,$cwd,$log,$startedFile) try { $p = Start-Process -FilePath $comspec -ArgumentList @('/d','/c','call "' + $cmdPath + '"') -WorkingDirectory $cwd -Verb RunAs -PassThru; 'started' ^| Set-Content -LiteralPath $startedFile; $p.WaitForExit(); 0 } catch { $_ ^| Out-String ^| Set-Content -LiteralPath $log; 1 } } -ArgumentList $env:ComSpec,$cmdPath,$env:CP_INSTALL_CWD,$log,$startedFile
+>> "%ELEVATE_PS%" echo $job = Start-Job -ScriptBlock { param($cmdPath,$cwd,$log,$startedFile) try { $p = Start-Process -FilePath $cmdPath -WorkingDirectory $cwd -Verb RunAs -PassThru; 'started' ^| Set-Content -LiteralPath $startedFile; $p.WaitForExit(); 0 } catch { $_ ^| Out-String ^| Set-Content -LiteralPath $log; 1 } } -ArgumentList $cmdPath,$env:CP_INSTALL_CWD,$log,$startedFile
 >> "%ELEVATE_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%ELEVATE_PS%" echo $i = 0
 >> "%ELEVATE_PS%" echo while ($job.State -eq 'Running') { if (Test-Path -LiteralPath $startedFile) { $label = $installLabel } else { $label = $requestLabel }; Write-Host -NoNewline ($cr + $clear + $frames[$i %% $frames.Count] + ' ' + $label); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
