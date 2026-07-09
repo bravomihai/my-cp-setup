@@ -230,6 +230,7 @@ set "SPIN_PS=%TEMP%\cp_setup_pacman_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $q = [char]34
 >> "%SPIN_PS%" echo $esc = [char]27
 >> "%SPIN_PS%" echo $cr = [char]13
+>> "%SPIN_PS%" echo $clear = $esc + '[2K'
 >> "%SPIN_PS%" echo $install = '[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $log,$wrapper -ErrorAction SilentlyContinue
 >> "%SPIN_PS%" echo $shell = $null
@@ -245,14 +246,14 @@ set "SPIN_PS=%TEMP%\cp_setup_pacman_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $job = Start-Job -ScriptBlock { param($wrapper) ^& $env:ComSpec /d /c call $wrapper; $LASTEXITCODE } -ArgumentList $wrapper
 >> "%SPIN_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%SPIN_PS%" echo $i = 0
->> "%SPIN_PS%" echo while ($job.State -eq 'Running') { Write-Host -NoNewline ($cr + $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label + ' (' + $hint + ')'); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
+>> "%SPIN_PS%" echo while ($job.State -eq 'Running') { Write-Host -NoNewline ($cr + $clear + $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label + ' (' + $hint + ')'); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
 >> "%SPIN_PS%" echo $jobResult = Receive-Job -Wait $job
 >> "%SPIN_PS%" echo Remove-Job $job -Force
 >> "%SPIN_PS%" echo $jobItems = @($jobResult)
 >> "%SPIN_PS%" echo if ($jobItems.Count -eq 0) { $exitCode = 1 } else { $exitCode = [int]$jobItems[-1] }
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue
 >> "%SPIN_PS%" echo if ($exitCode -eq 0) { $result = 'OK' } else { $result = 'FAILED' }
->> "%SPIN_PS%" echo Write-Host ($cr + $install + ' ' + $result + ' ' + $label + '     ')
+>> "%SPIN_PS%" echo Write-Host ($cr + $clear + $install + ' ' + $result + ' ' + $label)
 >> "%SPIN_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SPIN_PS%"
 set "SPIN_EXIT=%ERRORLEVEL%"
@@ -273,6 +274,7 @@ set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $q = [char]34
 >> "%SPIN_PS%" echo $esc = [char]27
 >> "%SPIN_PS%" echo $cr = [char]13
+>> "%SPIN_PS%" echo $clear = $esc + '[2K'
 >> "%SPIN_PS%" echo $install = '[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $log,$wrapper -ErrorAction SilentlyContinue
 >> "%SPIN_PS%" echo $runLine = [string]('call ' + $cmd + ' 1^>' + $q + $log + $q + ' 2^>^&1')
@@ -281,14 +283,14 @@ set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $job = Start-Job -ScriptBlock { param($wrapper) ^& $env:ComSpec /d /c call $wrapper; $LASTEXITCODE } -ArgumentList $wrapper
 >> "%SPIN_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%SPIN_PS%" echo $i = 0
->> "%SPIN_PS%" echo while ($job.State -eq 'Running') { $text = $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label; if ($hint) { $text += ' (' + $hint + ')' }; Write-Host -NoNewline ($cr + $text); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
+>> "%SPIN_PS%" echo while ($job.State -eq 'Running') { $text = $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label; if ($hint) { $text += ' (' + $hint + ')' }; Write-Host -NoNewline ($cr + $clear + $text); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
 >> "%SPIN_PS%" echo $jobResult = Receive-Job -Wait $job
 >> "%SPIN_PS%" echo Remove-Job $job -Force
 >> "%SPIN_PS%" echo $jobItems = @($jobResult)
 >> "%SPIN_PS%" echo if ($jobItems.Count -eq 0) { $exitCode = 1 } else { $exitCode = [int]$jobItems[-1] }
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue
 >> "%SPIN_PS%" echo if ($exitCode -eq 0) { $result = 'OK' } else { $result = 'FAILED' }
->> "%SPIN_PS%" echo Write-Host ($cr + $install + ' ' + $result + ' ' + $label + '     ')
+>> "%SPIN_PS%" echo Write-Host ($cr + $clear + $install + ' ' + $result + ' ' + $label)
 >> "%SPIN_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SPIN_PS%"
 set "SPIN_EXIT=%ERRORLEVEL%"
