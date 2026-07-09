@@ -18,6 +18,14 @@ Verify without changing environment variables:
 scripts\install.bat --check
 ```
 
+If `--check` reports missing components, run the installer without `--check` to install them.
+
+Remove only the environment entries added by this setup:
+
+```bat
+scripts\uninstall.bat
+```
+
 If you cloned without submodules:
 
 ```bat
@@ -29,13 +37,13 @@ scripts\install.bat
 
 `scripts\install.bat` checks for:
 
-- `git`
+- `git`, needed for the `ac-library` submodule
 - `nvim`
 - `javac`
 - `g++`
 - usable Python 3, preferring MSYS2 Python and ignoring the Microsoft Store `WindowsApps` alias
 
-If a tool is missing, it tries to install it with `winget`. For C++ and Python, it installs MSYS2 externally and installs only the CP toolchain with `pacman`: GCC, GDB, clang tools, and Python.
+If a tool is missing during a normal install, it tries to install it with `winget`. Existing Git is kept silent during normal installs; if Git is missing, the installer shows it like the other install steps. For C++ and Python, it installs MSYS2 externally and installs only the CP toolchain with `pacman`: GCC, GDB, clang tools, and Python.
 
 The installer also:
 
@@ -70,6 +78,7 @@ my-cp-setup
 |   |-- cp_macros            CMD DOSKEY macros
 |   |-- expand.py            Generate submit.cpp/submit.java/submit.py
 |   |-- install.bat          Windows installer
+|   |-- uninstall.bat        Remove environment entries added by setup
 |   `-- run.py               Run C++/Java/Python files
 |-- template/
 |   |-- cpp/solve.cpp
@@ -113,12 +122,28 @@ Generate a standalone submit file and copy it to the clipboard:
 On success it prints one of:
 
 ```text
-[DONE] submit.cpp generated
-[DONE] submit.java generated
-[DONE] submit.py generated
+submit.cpp generated
+submit.java generated
+submit.py generated
 ```
 
-Only `DONE` is green. On failure it prints an `EXPAND FAILED` message.
+On failure it prints an `EXPAND FAILED` message.
+
+## Uninstall
+
+`scripts\uninstall.bat` removes only entries managed by this setup:
+
+- known User `Path` entries added by the installer
+- `XDG_CONFIG_HOME`, `CP_SETUP_ROOT`, `CP_PYTHON`, and `CP_GPP` when they point to this setup or the known MSYS2 install paths
+- CMD AutoRun for `scripts\cp_macros`
+
+It does not uninstall external tools such as Neovim, JDK, MSYS2, or Git.
+
+Preview without changing anything:
+
+```bat
+scripts\uninstall.bat --check
+```
 
 ## CMD Macros
 

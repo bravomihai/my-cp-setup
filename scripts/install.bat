@@ -7,6 +7,7 @@ set "ORIGINAL_ARGS=%*"
 
 set "CHECK_ONLY=0"
 set "VERBOSE=0"
+set "MISSING_COUNT=0"
 set "WINGET_ARGS=--exact --source winget --accept-package-agreements --accept-source-agreements --disable-interactivity"
 set "WINGET_QUIET_ARGS=%WINGET_ARGS% --silent"
 
@@ -46,6 +47,8 @@ if "%CHECK_ONLY%"=="0" (
     call :refresh_path
 )
 
+call :need_git
+if errorlevel 1 goto failed
 call :need_or_install nvim Neovim.Neovim "Neovim"
 if errorlevel 1 goto failed
 call :need_or_install javac EclipseAdoptium.Temurin.21.JDK "JDK"
@@ -56,11 +59,11 @@ if not errorlevel 1 (
     call :print_found "g++"
 ) else (
     if "%CHECK_ONLY%"=="1" (
-        echo [%ESC%[33mMISSING%ESC%[0m] g++
-        goto failed
+        call :print_missing "g++"
+    ) else (
+        call :install_msys2_toolchain
+        if errorlevel 1 goto failed
     )
-    call :install_msys2_toolchain
-    if errorlevel 1 goto failed
 )
 
 if "%CHECK_ONLY%"=="1" (
@@ -76,18 +79,20 @@ if "%CHECK_ONLY%"=="1" (
 )
 if errorlevel 1 goto failed
 call :refresh_path
+
+if "%CHECK_ONLY%"=="1" if not "%MISSING_COUNT%"=="0" goto skip_gpp_validation
 call :find_gpp
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] g++ was installed, but g++.exe was not found in known MSYS2 paths.
     goto failed
 )
+:skip_gpp_validation
 
 call :find_python
 if not errorlevel 1 (
     if "%CHECK_ONLY%"=="1" call :print_found "Python"
 ) else if "%CHECK_ONLY%"=="1" (
-    echo [%ESC%[33mMISSING%ESC%[0m] Python 3
-    goto failed
+    call :print_missing "Python 3"
 ) else (
     call :install_msys2_toolchain
     if errorlevel 1 goto failed
@@ -98,6 +103,8 @@ if not errorlevel 1 (
         goto failed
     )
 )
+
+if "%CHECK_ONLY%"=="1" if not "%MISSING_COUNT%"=="0" goto check_missing
 
 if "%CHECK_ONLY%"=="0" (
     powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('XDG_CONFIG_HOME', '%ROOT%', 'User')"
@@ -131,6 +138,12 @@ echo [%ESC%[32mDONE%ESC%[0m] CP setup is ready.
 echo Restart terminals so updated User PATH and XDG_CONFIG_HOME are visible everywhere.
 exit /b 0
 
+:check_missing
+echo.
+echo [%ESC%[33mMISSING%ESC%[0m] Some components are not available.
+echo Run scripts\install.bat without --check to install missing components.
+exit /b 1
+
 :enable_ansi
 reg add HKCU\Console /v VirtualTerminalLevel /t REG_DWORD /d 1 /f >nul 2>nul
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -Namespace Native -Name Console -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern System.IntPtr GetStdHandle(int nStdHandle); [DllImport(\"kernel32.dll\")] public static extern bool GetConsoleMode(System.IntPtr hConsoleHandle, out int lpMode); [DllImport(\"kernel32.dll\")] public static extern bool SetConsoleMode(System.IntPtr hConsoleHandle, int dwMode);'; $h=[Native.Console]::GetStdHandle(-11); $mode=0; if ([Native.Console]::GetConsoleMode($h,[ref]$mode)) { [Native.Console]::SetConsoleMode($h,$mode -bor 4) | Out-Null }" >nul 2>nul
@@ -160,7 +173,7 @@ set "CP_INSTALL_CWD=%ROOT%"
 >> "%ELEVATE_PS%" echo $exitFile = $env:ELEVATE_EXIT_FILE
 >> "%ELEVATE_PS%" echo $startedFile = $env:ELEVATE_STARTED_FILE
 >> "%ELEVATE_PS%" echo Remove-Item -LiteralPath $log,$exitFile,$startedFile -ErrorAction SilentlyContinue
->> "%ELEVATE_PS%" echo $cmd = 'cd /d "' + $env:CP_INSTALL_CWD + '" ^&^& call "' + $env:CP_INSTALL_SCRIPT + '" ' + $env:CP_INSTALL_ARGS + ' ^& set "CP_SETUP_EXIT=!ERRORLEVEL!" ^& ^> "' + $exitFile + '" echo !CP_SETUP_EXIT! ^& echo. ^& echo Press any key to exit... ^& pause ^>nul ^& exit /b !CP_SETUP_EXIT!'
+>> "%ELEVATE_PS%" echo $cmd = 'cd /d "' + $env:CP_INSTALL_CWD + '" ^&^& call "' + $env:CP_INSTALL_SCRIPT + '" ' + $env:CP_INSTALL_ARGS + ' ^& set "CP_SETUP_EXIT=^^!ERRORLEVEL^^!" ^& ^> "' + $exitFile + '" echo ^^!CP_SETUP_EXIT^^! ^& echo. ^& echo Press any key to exit... ^& pause ^>nul ^& exit /b ^^!CP_SETUP_EXIT^^!'
 >> "%ELEVATE_PS%" echo $job = Start-Job -ScriptBlock { param($comspec,$cmd,$cwd,$log,$startedFile) try { $p = Start-Process -FilePath $comspec -ArgumentList @('/d','/v:on','/c',$cmd) -WorkingDirectory $cwd -Verb RunAs -PassThru; 'started' ^| Set-Content -LiteralPath $startedFile; $p.WaitForExit(); 0 } catch { $_ ^| Out-String ^| Set-Content -LiteralPath $log; 1 } } -ArgumentList $env:ComSpec,$cmd,$env:CP_INSTALL_CWD,$log,$startedFile
 >> "%ELEVATE_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%ELEVATE_PS%" echo $i = 0
@@ -185,6 +198,43 @@ if not "%ELEVATE_EXIT%"=="0" (
 )
 exit /b 2
 
+:need_git
+where git >nul 2>nul
+if not errorlevel 1 (
+    if "%CHECK_ONLY%"=="1" call :print_found "Git"
+    exit /b 0
+)
+
+if "%CHECK_ONLY%"=="1" (
+    call :print_missing "Git"
+    exit /b 0
+)
+
+call :require_winget
+if errorlevel 1 exit /b 1
+
+if "%VERBOSE%"=="1" (
+    echo [%ESC%[38;5;153mINSTALLING%ESC%[0m] Git via winget: Git.Git
+    "%WINGET%" install --id Git.Git %WINGET_ARGS%
+) else (
+    set "INSTALL_CMD=!WINGET! install --id Git.Git %WINGET_QUIET_ARGS%"
+    call :run_install_spinner "Git via winget: Git.Git" "" "%TEMP%\cp_setup_winget.log"
+)
+set "INSTALL_EXIT=%ERRORLEVEL%"
+call :install_paths
+if errorlevel 1 exit /b 1
+call :refresh_path
+where git >nul 2>nul
+if not errorlevel 1 exit /b 0
+if not "%INSTALL_EXIT%"=="0" (
+    echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for Git.
+    if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
+    exit /b 1
+)
+echo [%ESC%[31mFAILED%ESC%[0m] Git was not found after winget install.
+if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
+exit /b 1
+
 :need_or_install
 where "%~1" >nul 2>nul
 if not errorlevel 1 (
@@ -193,7 +243,7 @@ if not errorlevel 1 (
 )
 
 if "%CHECK_ONLY%"=="1" (
-    echo [%ESC%[33mMISSING%ESC%[0m] %~3
+    call :print_missing "%~3"
     exit /b 0
 )
 
@@ -226,6 +276,11 @@ exit /b 1
 
 :print_found
 echo [%ESC%[38;5;114mFOUND%ESC%[0m] %~1
+exit /b 0
+
+:print_missing
+set /A MISSING_COUNT+=1
+echo [%ESC%[33mMISSING%ESC%[0m] %~1
 exit /b 0
 
 :check_env_paths
