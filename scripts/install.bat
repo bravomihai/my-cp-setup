@@ -66,6 +66,30 @@ if not errorlevel 1 (
     )
 )
 
+if "%CHECK_ONLY%"=="1" if not "%MISSING_COUNT%"=="0" goto skip_gpp_validation
+call :find_gpp
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] g++ was installed, but g++.exe was not found in known MSYS2 paths.
+    goto failed
+)
+:skip_gpp_validation
+
+call :find_python
+if not errorlevel 1 (
+    call :print_found "Python"
+) else if "%CHECK_ONLY%"=="1" (
+    call :print_missing "Python 3"
+) else (
+    call :install_msys2_toolchain
+    if errorlevel 1 goto failed
+    call :refresh_path
+    call :find_python
+    if errorlevel 1 (
+        echo [%ESC%[31mFAILED%ESC%[0m] Python was installed, but python.exe was not found in known MSYS2 paths.
+        goto failed
+    )
+)
+
 if "%CHECK_ONLY%"=="1" (
     if "%VERBOSE%"=="1" (
         call :install_paths check
@@ -79,30 +103,6 @@ if "%CHECK_ONLY%"=="1" (
 )
 if errorlevel 1 goto failed
 call :refresh_path
-
-if "%CHECK_ONLY%"=="1" if not "%MISSING_COUNT%"=="0" goto skip_gpp_validation
-call :find_gpp
-if errorlevel 1 (
-    echo [%ESC%[31mFAILED%ESC%[0m] g++ was installed, but g++.exe was not found in known MSYS2 paths.
-    goto failed
-)
-:skip_gpp_validation
-
-call :find_python
-if not errorlevel 1 (
-    if "%CHECK_ONLY%"=="1" call :print_found "Python"
-) else if "%CHECK_ONLY%"=="1" (
-    call :print_missing "Python 3"
-) else (
-    call :install_msys2_toolchain
-    if errorlevel 1 goto failed
-    call :refresh_path
-    call :find_python
-    if errorlevel 1 (
-        echo [%ESC%[31mFAILED%ESC%[0m] Python was installed, but python.exe was not found in known MSYS2 paths.
-        goto failed
-    )
-)
 
 if "%CHECK_ONLY%"=="1" if not "%MISSING_COUNT%"=="0" goto check_missing
 
@@ -157,9 +157,19 @@ set "ELEVATE_PS=%TEMP%\cp_setup_elevate_%RANDOM%_%RANDOM%.ps1"
 set "ELEVATE_LOG=%TEMP%\cp_setup_elevate.log"
 set "ELEVATE_EXIT_FILE=%TEMP%\cp_setup_elevate_exit_%RANDOM%_%RANDOM%.txt"
 set "ELEVATE_STARTED_FILE=%TEMP%\cp_setup_elevate_started_%RANDOM%_%RANDOM%.txt"
+set "ELEVATE_CMD=%TEMP%\cp_setup_elevate_%RANDOM%_%RANDOM%.cmd"
 set "CP_INSTALL_SCRIPT=%~f0"
 set "CP_INSTALL_ARGS=%ORIGINAL_ARGS%"
 set "CP_INSTALL_CWD=%ROOT%"
+> "%ELEVATE_CMD%" echo @echo off
+>> "%ELEVATE_CMD%" echo cd /d "%CP_INSTALL_CWD%"
+>> "%ELEVATE_CMD%" echo call "%CP_INSTALL_SCRIPT%" %CP_INSTALL_ARGS%
+>> "%ELEVATE_CMD%" echo set "CP_SETUP_EXIT=%%ERRORLEVEL%%"
+>> "%ELEVATE_CMD%" echo ^> "%ELEVATE_EXIT_FILE%" echo %%CP_SETUP_EXIT%%
+>> "%ELEVATE_CMD%" echo echo.
+>> "%ELEVATE_CMD%" echo echo Press any key to exit...
+>> "%ELEVATE_CMD%" echo pause ^>nul
+>> "%ELEVATE_CMD%" echo exit /b %%CP_SETUP_EXIT%%
 > "%ELEVATE_PS%" echo $ErrorActionPreference = 'Stop'
 >> "%ELEVATE_PS%" echo $requestLabel = 'Requesting administrator rights...'
 >> "%ELEVATE_PS%" echo $installLabel = 'Administrator rights granted, installing...'
@@ -173,8 +183,8 @@ set "CP_INSTALL_CWD=%ROOT%"
 >> "%ELEVATE_PS%" echo $exitFile = $env:ELEVATE_EXIT_FILE
 >> "%ELEVATE_PS%" echo $startedFile = $env:ELEVATE_STARTED_FILE
 >> "%ELEVATE_PS%" echo Remove-Item -LiteralPath $log,$exitFile,$startedFile -ErrorAction SilentlyContinue
->> "%ELEVATE_PS%" echo $cmd = 'cd /d "' + $env:CP_INSTALL_CWD + '" ^&^& call "' + $env:CP_INSTALL_SCRIPT + '" ' + $env:CP_INSTALL_ARGS + ' ^& set "CP_SETUP_EXIT=^^!ERRORLEVEL^^!" ^& ^> "' + $exitFile + '" echo ^^!CP_SETUP_EXIT^^! ^& echo. ^& echo Press any key to exit... ^& pause ^>nul ^& exit /b ^^!CP_SETUP_EXIT^^!'
->> "%ELEVATE_PS%" echo $job = Start-Job -ScriptBlock { param($comspec,$cmd,$cwd,$log,$startedFile) try { $p = Start-Process -FilePath $comspec -ArgumentList @('/d','/v:on','/c',$cmd) -WorkingDirectory $cwd -Verb RunAs -PassThru; 'started' ^| Set-Content -LiteralPath $startedFile; $p.WaitForExit(); 0 } catch { $_ ^| Out-String ^| Set-Content -LiteralPath $log; 1 } } -ArgumentList $env:ComSpec,$cmd,$env:CP_INSTALL_CWD,$log,$startedFile
+>> "%ELEVATE_PS%" echo $cmdPath = $env:ELEVATE_CMD
+>> "%ELEVATE_PS%" echo $job = Start-Job -ScriptBlock { param($comspec,$cmdPath,$cwd,$log,$startedFile) try { $p = Start-Process -FilePath $comspec -ArgumentList @('/d','/c','call "' + $cmdPath + '"') -WorkingDirectory $cwd -Verb RunAs -PassThru; 'started' ^| Set-Content -LiteralPath $startedFile; $p.WaitForExit(); 0 } catch { $_ ^| Out-String ^| Set-Content -LiteralPath $log; 1 } } -ArgumentList $env:ComSpec,$cmdPath,$env:CP_INSTALL_CWD,$log,$startedFile
 >> "%ELEVATE_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%ELEVATE_PS%" echo $i = 0
 >> "%ELEVATE_PS%" echo while ($job.State -eq 'Running') { if (Test-Path -LiteralPath $startedFile) { $label = $installLabel } else { $label = $requestLabel }; Write-Host -NoNewline ($cr + $clear + $frames[$i %% $frames.Count] + ' ' + $label); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
@@ -192,6 +202,7 @@ set "CP_INSTALL_CWD=%ROOT%"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ELEVATE_PS%"
 set "ELEVATE_EXIT=%ERRORLEVEL%"
 del "%ELEVATE_PS%" >nul 2>nul
+del "%ELEVATE_CMD%" >nul 2>nul
 if not "%ELEVATE_EXIT%"=="0" (
     if exist "%ELEVATE_LOG%" type "%ELEVATE_LOG%"
     exit /b 1
@@ -238,7 +249,7 @@ exit /b 1
 :need_or_install
 where "%~1" >nul 2>nul
 if not errorlevel 1 (
-    if "%CHECK_ONLY%"=="1" call :print_found "%~3"
+    call :print_found "%~3"
     exit /b 0
 )
 
