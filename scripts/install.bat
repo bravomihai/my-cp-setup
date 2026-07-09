@@ -37,8 +37,6 @@ if "%CHECK_ONLY%"=="0" (
     call :refresh_path
 )
 
-call :need_or_install git Git.Git "Git"
-if errorlevel 1 goto failed
 call :need_or_install nvim Neovim.Neovim "Neovim"
 if errorlevel 1 goto failed
 call :need_or_install javac EclipseAdoptium.Temurin.21.JDK "JDK"
@@ -109,7 +107,8 @@ if "%CHECK_ONLY%"=="0" (
     echo [%ESC%[38;5;183mCHECK%ESC%[0m] Environment writes skipped.
 )
 
-if exist "%ROOT%\.git" (
+if exist "%ROOT%\.git" where git >nul 2>nul
+if not errorlevel 1 if exist "%ROOT%\.git" (
     git -C "%ROOT%" submodule update --init libraries/ac-library
     if errorlevel 1 goto failed
 )
@@ -145,12 +144,23 @@ if "%VERBOSE%"=="1" (
     set "INSTALL_CMD=""%WINGET%"" install --id %~2 %WINGET_QUIET_ARGS%"
     call :run_install_spinner "%~3 via winget: %~2" "" "%TEMP%\cp_setup_winget.log"
 )
-if errorlevel 1 (
+set "INSTALL_EXIT=%ERRORLEVEL%"
+call :install_paths
+if errorlevel 1 exit /b 1
+call :refresh_path
+where "%~1" >nul 2>nul
+if not errorlevel 1 (
+    call :print_found "%~3"
+    exit /b 0
+)
+if not "%INSTALL_EXIT%"=="0" (
     echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for %~3.
     if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
     exit /b 1
 )
-exit /b %ERRORLEVEL%
+echo [%ESC%[31mFAILED%ESC%[0m] %~3 was not found after winget install.
+if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
+exit /b 1
 
 :print_found
 echo [%ESC%[38;5;114mFOUND%ESC%[0m] %~1
@@ -171,6 +181,17 @@ echo Install or update App Installer from Microsoft Store, open a new cmd.exe, t
 echo Store shortcut: start ms-windows-store://pdp/?ProductId=9NBLGGH4NNS1
 exit /b 1
 
+:find_msys2_shell
+set "MSYS2_SHELL="
+if exist "C:\msys64\msys2_shell.cmd" set "MSYS2_SHELL=C:\msys64\msys2_shell.cmd"
+if not defined MSYS2_SHELL if exist "D:\software\programming\msys2\msys2_shell.cmd" set "MSYS2_SHELL=D:\software\programming\msys2\msys2_shell.cmd"
+if defined MSYS2_SHELL exit /b 0
+for /F "usebackq delims=" %%P in (`where msys2_shell.cmd 2^>nul`) do (
+    if not defined MSYS2_SHELL set "MSYS2_SHELL=%%P"
+)
+if defined MSYS2_SHELL exit /b 0
+exit /b 1
+
 :install_msys2_toolchain
 call :require_winget
 if errorlevel 1 exit /b 1
@@ -181,6 +202,8 @@ if "%VERBOSE%"=="1" (
     set "INSTALL_CMD=""%WINGET%"" install --id MSYS2.MSYS2 %WINGET_QUIET_ARGS%"
     call :run_install_spinner "MSYS2 via winget: MSYS2.MSYS2" "" "%TEMP%\cp_setup_winget.log"
 )
+set "INSTALL_EXIT=%ERRORLEVEL%"
+call :find_msys2_shell
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for MSYS2.
     if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
@@ -188,7 +211,7 @@ if errorlevel 1 (
 )
 if "%VERBOSE%"=="1" (
     echo [%ESC%[38;5;153mINSTALL%ESC%[0m] MSYS2 toolchain via pacman
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -Syu --noconfirm'; if ($LASTEXITCODE -ne 0) { throw 'pacman system update failed.' }; & $shell -mingw64 -defterm -no-start -here -c 'pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; & $shell -mingw64 -no-start -here -c 'pacman -Syu --noconfirm'; if ($LASTEXITCODE -ne 0) { throw 'pacman system update failed.' }; & $shell -mingw64 -no-start -here -c 'pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }"
 ) else (
     call :run_pacman_spinner
 )
@@ -200,14 +223,14 @@ if errorlevel 1 (
 exit /b %ERRORLEVEL%
 
 :run_pacman_spinner
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$label='MSYS2 toolchain via pacman'; $hint='this may take a while'; $log=$env:TEMP + '\cp_setup_pacman.log'; $err=$log + '.err'; $esc=[char]27; $install='[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'; Remove-Item -LiteralPath $log,$err -ErrorAction SilentlyContinue; $shell=$null; foreach ($path in @('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd')) { if (Test-Path -LiteralPath $path) { $shell=$path; break } }; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { Write-Host ($install + ' failed ' + $label); 'Could not find msys2_shell.cmd after installing MSYS2.' | Set-Content -LiteralPath $log; exit 1 }; $command='""' + $shell + '"" -mingw64 -defterm -no-start -here -c ""pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python""'; $p=Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/c',$command) -RedirectStandardOutput $log -RedirectStandardError $err -PassThru -WindowStyle Hidden; $frames=@([char]92,'-','/','|'); $i=0; while (-not $p.HasExited) { Write-Host -NoNewline (""`r"" + $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label + ' (' + $hint + ')'); Start-Sleep -Milliseconds 100; $i++ }; if (Test-Path -LiteralPath $err) { Get-Content -LiteralPath $err -ErrorAction SilentlyContinue | Add-Content -LiteralPath $log; Remove-Item -LiteralPath $err -ErrorAction SilentlyContinue }; if ($p.ExitCode -eq 0) { Write-Host (""`r"" + $install + ' ' + $label); exit 0 }; Write-Host (""`r"" + $install + ' failed ' + $label); exit $p.ExitCode"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$label='MSYS2 toolchain via pacman'; $hint='this may take a while'; $log=$env:TEMP + '\cp_setup_pacman.log'; $err=$log + '.err'; $esc=[char]27; $cr=[char]13; $install='[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'; Remove-Item -LiteralPath $log,$err -ErrorAction SilentlyContinue; $shell=$null; foreach ($path in @('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd')) { if (Test-Path -LiteralPath $path) { $shell=$path; break } }; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { 'Could not find msys2_shell.cmd after installing MSYS2.' | Set-Content -LiteralPath $log; Write-Host ($install + ' ' + $label); exit 1 }; $args=@('-mingw64','-no-start','-here','-c','pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'); $p=Start-Process -FilePath $shell -ArgumentList $args -RedirectStandardOutput $log -RedirectStandardError $err -PassThru -WindowStyle Hidden; $frames=@([char]92,'-','/','|'); $i=0; while (-not $p.HasExited) { Write-Host -NoNewline ($cr + $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label + ' (' + $hint + ')'); Start-Sleep -Milliseconds 100; $i++ }; if (Test-Path -LiteralPath $err) { Get-Content -LiteralPath $err -ErrorAction SilentlyContinue | Add-Content -LiteralPath $log; Remove-Item -LiteralPath $err -ErrorAction SilentlyContinue }; Write-Host ($cr + $install + ' ' + $label); exit $p.ExitCode"
 exit /b %ERRORLEVEL%
 
 :run_install_spinner
 set "SPIN_LABEL=%~1"
 set "SPIN_HINT=%~2"
 set "SPIN_LOG=%~3"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$label=$env:SPIN_LABEL; $hint=$env:SPIN_HINT; $log=$env:SPIN_LOG; $cmd=$env:INSTALL_CMD; $err=$log + '.err'; $esc=[char]27; $install='[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'; Remove-Item -LiteralPath $log,$err -ErrorAction SilentlyContinue; $p=Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/c',$cmd) -RedirectStandardOutput $log -RedirectStandardError $err -PassThru -WindowStyle Hidden; $frames=@([char]92,'-','/','|'); $i=0; while (-not $p.HasExited) { $text=$install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label; if ($hint) { $text += ' (' + $hint + ')' }; Write-Host -NoNewline (\"`r\" + $text); Start-Sleep -Milliseconds 100; $i++ }; if (Test-Path -LiteralPath $err) { Get-Content -LiteralPath $err -ErrorAction SilentlyContinue | Add-Content -LiteralPath $log; Remove-Item -LiteralPath $err -ErrorAction SilentlyContinue }; if ($p.ExitCode -eq 0) { Write-Host (\"`r\" + $install + \" \" + $label); exit 0 }; Write-Host (\"`r\" + $install + \" failed \" + $label); exit $p.ExitCode"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$label=$env:SPIN_LABEL; $hint=$env:SPIN_HINT; $log=$env:SPIN_LOG; $cmd=$env:INSTALL_CMD; $err=$log + '.err'; $esc=[char]27; $cr=[char]13; $install='[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'; Remove-Item -LiteralPath $log,$err -ErrorAction SilentlyContinue; $p=Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/c',$cmd) -RedirectStandardOutput $log -RedirectStandardError $err -PassThru -WindowStyle Hidden; $frames=@([char]92,'-','/','|'); $i=0; while (-not $p.HasExited) { $text=$install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label; if ($hint) { $text += ' (' + $hint + ')' }; Write-Host -NoNewline ($cr + $text); Start-Sleep -Milliseconds 100; $i++ }; if (Test-Path -LiteralPath $err) { Get-Content -LiteralPath $err -ErrorAction SilentlyContinue | Add-Content -LiteralPath $log; Remove-Item -LiteralPath $err -ErrorAction SilentlyContinue }; Write-Host ($cr + $install + ' ' + $label); exit $p.ExitCode"
 exit /b %ERRORLEVEL%
 
 :install_paths
@@ -262,11 +285,6 @@ if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] g++ is not visible during verification.
     exit /b 1
 )
-where git >nul 2>nul
-if errorlevel 1 (
-    echo [%ESC%[31mFAILED%ESC%[0m] git is not visible during verification.
-    exit /b 1
-)
 where nvim >nul 2>nul
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] nvim is not visible during verification.
@@ -310,7 +328,8 @@ if errorlevel 1 goto verify_failed
 call :cleanup_verify
 if errorlevel 1 exit /b 1
 
-if exist "%ROOT%\.git" (
+if exist "%ROOT%\.git" where git >nul 2>nul
+if not errorlevel 1 if exist "%ROOT%\.git" (
     git -C "%ROOT%" submodule status >nul
     if errorlevel 1 exit /b 1
 )
