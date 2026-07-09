@@ -28,6 +28,8 @@ exit /b 1
 
 :parsed_args
 
+if "%CHECK_ONLY%"=="0" set "VERBOSE=0"
+
 if "%CHECK_ONLY%"=="0" (
     call :ensure_admin
     if errorlevel 2 exit /b 0
@@ -47,6 +49,12 @@ if "%CHECK_ONLY%"=="0" (
     call :refresh_path
 )
 
+if "%CHECK_ONLY%"=="1" (
+    echo Checking main components...
+) else (
+    echo Installing main components...
+)
+
 call :need_git
 if errorlevel 1 goto failed
 call :need_or_install nvim Neovim.Neovim "Neovim"
@@ -56,7 +64,7 @@ if errorlevel 1 goto failed
 
 where g++ >nul 2>nul
 if not errorlevel 1 (
-    call :print_found "g++"
+    call :print_found_where "g++" "g++"
 ) else (
     if "%CHECK_ONLY%"=="1" (
         call :print_missing "g++"
@@ -76,7 +84,7 @@ if errorlevel 1 (
 
 call :find_python
 if not errorlevel 1 (
-    call :print_found "Python"
+    call :print_found_path "Python" "%CP_PYTHON%"
 ) else if "%CHECK_ONLY%"=="1" (
     call :print_missing "Python 3"
 ) else (
@@ -94,7 +102,6 @@ if "%CHECK_ONLY%"=="1" (
     if "%VERBOSE%"=="1" (
         call :install_paths check
         if errorlevel 1 goto failed
-        call :print_found "Environment paths"
     ) else (
         call :check_env_paths
     )
@@ -105,12 +112,16 @@ if errorlevel 1 goto failed
 call :refresh_path
 
 if exist "%ROOT%\.git" (
+    echo.
     if "%CHECK_ONLY%"=="1" (
+        echo Checking libraries...
         call :check_ac_library
     ) else (
+        echo Installing libraries...
         call :update_ac_library
     )
     if errorlevel 1 goto failed
+    echo.
 )
 
 if "%CHECK_ONLY%"=="1" if not "%MISSING_COUNT%"=="0" goto check_missing
@@ -214,7 +225,7 @@ exit /b 2
 :need_git
 where git >nul 2>nul
 if not errorlevel 1 (
-    if "%CHECK_ONLY%"=="1" call :print_found "Git"
+    if "%CHECK_ONLY%"=="1" call :print_found_where "Git" "git"
     exit /b 0
 )
 
@@ -251,7 +262,7 @@ exit /b 1
 :need_or_install
 where "%~1" >nul 2>nul
 if not errorlevel 1 (
-    call :print_found "%~3"
+    call :print_found_where "%~3" "%~1"
     exit /b 0
 )
 
@@ -291,6 +302,30 @@ exit /b 1
 echo [%ESC%[38;5;114mFOUND%ESC%[0m] %~1
 exit /b 0
 
+:print_found_path
+if "%CHECK_ONLY%"=="1" if "%VERBOSE%"=="1" (
+    echo [%ESC%[38;5;114mFOUND%ESC%[0m] %~1: %~2
+) else (
+    call :print_found "%~1"
+)
+exit /b 0
+
+:print_found_where
+set "FOUND_PATH="
+if "%CHECK_ONLY%"=="1" if "%VERBOSE%"=="1" (
+    for /F "usebackq delims=" %%P in (`where "%~2" 2^>nul`) do (
+        if not defined FOUND_PATH set "FOUND_PATH=%%P"
+    )
+    if defined FOUND_PATH (
+        call :print_found_path "%~1" "!FOUND_PATH!"
+    ) else (
+        call :print_found "%~1"
+    )
+) else (
+    call :print_found "%~1"
+)
+exit /b 0
+
 :print_missing
 set /A MISSING_COUNT+=1
 echo [%ESC%[33mMISSING%ESC%[0m] %~1
@@ -300,7 +335,7 @@ exit /b 0
 where git >nul 2>nul
 if errorlevel 1 exit /b 0
 if not exist "%ROOT%\.gitmodules" exit /b 0
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $path=Join-Path $root 'libraries\ac-library'; $esc=[char]27; $found='['+$esc+'[38;5;114mFOUND'+$esc+'[0m]'; $missing='['+$esc+'[33mMISSING'+$esc+'[0m]'; if (-not (Test-Path -LiteralPath (Join-Path $path '.git'))) { Write-Host ($missing+' ac-library update'); exit 2 }; $local=(& git -C $path rev-parse HEAD 2>$null); if ($LASTEXITCODE -ne 0 -or -not $local) { Write-Host ($missing+' ac-library update'); exit 2 }; $remote=(& git -C $path ls-remote origin HEAD 2>$null); if ($LASTEXITCODE -ne 0 -or -not $remote) { Write-Host ($missing+' ac-library remote check'); exit 2 }; $remoteHead=($remote -split '\s+')[0]; if ($local.Trim() -ieq $remoteHead.Trim()) { Write-Host ($found+' ac-library') } else { Write-Host ($missing+' ac-library update') ; exit 2 }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $verbose='%VERBOSE%' -eq '1'; $path=Join-Path $root 'libraries\ac-library'; $esc=[char]27; $found='['+$esc+'[38;5;114mFOUND'+$esc+'[0m]'; $missing='['+$esc+'[33mMISSING'+$esc+'[0m]'; if (-not (Test-Path -LiteralPath (Join-Path $path '.git'))) { Write-Host ($missing+' ac-library update'); exit 2 }; $local=(& git -C $path rev-parse HEAD 2>$null); if ($LASTEXITCODE -ne 0 -or -not $local) { Write-Host ($missing+' ac-library update'); exit 2 }; $remote=(& git -C $path ls-remote origin HEAD 2>$null); if ($LASTEXITCODE -ne 0 -or -not $remote) { Write-Host ($missing+' ac-library remote check'); exit 2 }; $remoteHead=($remote -split '\s+')[0]; if ($local.Trim() -ieq $remoteHead.Trim()) { if ($verbose) { Write-Host ($found+' ac-library: '+$path) } else { Write-Host ($found+' ac-library') } } else { Write-Host ($missing+' ac-library update') ; exit 2 }"
 if errorlevel 2 (
     set /A MISSING_COUNT+=1
     exit /b 0
@@ -466,7 +501,7 @@ del "%SPIN_PS%" >nul 2>nul
 exit /b %SPIN_EXIT%
 
 :install_paths
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $check='%~1' -ieq 'check'; $verbose='%VERBOSE%' -eq '1'; $esc=[char]27; $jdkBins=@(); if (Test-Path -LiteralPath 'C:\Program Files\Eclipse Adoptium') { $jdkBins=Get-ChildItem -LiteralPath 'C:\Program Files\Eclipse Adoptium' -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'bin' } }; $c=@((Join-Path $root 'scripts'),'C:\Program Files\Git\cmd','C:\Program Files\Git\usr\bin','C:\Program Files\Git\mingw64\libexec\git-core','D:\software\programming\git\Git\cmd','D:\software\programming\git\Git\usr\bin','D:\software\programming\git\Git\mingw64\libexec\git-core','C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin') + $jdkBins; $e=$c | Where-Object { Test-Path -LiteralPath $_ }; if ($check) { if ($verbose) { foreach ($p in $e) { Write-Host \"[$($esc)[38;5;183mCHECK$($esc)[0m] PATH candidate exists: $p\" } } else { Write-Host \"[$($esc)[38;5;183mCHECK$($esc)[0m] Environment paths\" }; exit 0 }; $u=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $u) { $u='' }; $known=@($env:LOCALAPPDATA + '\Microsoft\WindowsApps') + $c; $known=$known | Where-Object { $_ } | Sort-Object Length -Descending -Unique; $parts=New-Object System.Collections.Generic.List[string]; foreach ($raw in ($u -split ';')) { $s=$raw.Trim(); while ($s) { $hit=$null; $hitAt=-1; foreach ($k in $known) { $i=$s.IndexOf($k, [StringComparison]::OrdinalIgnoreCase); if ($i -ge 0 -and ($hitAt -lt 0 -or $i -lt $hitAt -or ($i -eq $hitAt -and $k.Length -gt $hit.Length))) { $hit=$k; $hitAt=$i } }; if (-not $hit) { $parts.Add($s); break }; if ($hitAt -gt 0) { $prefix=$s.Substring(0,$hitAt).Trim(); if ($prefix) { $parts.Add($prefix) } }; $parts.Add($hit); $s=$s.Substring($hitAt + $hit.Length).Trim() } }; foreach ($p in $e) { $parts.Add($p) }; $clean=New-Object System.Collections.Generic.List[string]; foreach ($p in $parts) { $v=$p.Trim().TrimEnd('\'); if (-not $v) { continue }; $exists=$false; foreach ($x in $clean) { if ($x.TrimEnd('\') -ieq $v) { $exists=$true; break } }; if (-not $exists) { $clean.Add($v) } }; if ($verbose) { foreach ($p in $e) { Write-Host \"[PATH] Ensured: $p\" } }; [Environment]::SetEnvironmentVariable('Path',($clean -join ';'),'User')"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $check='%~1' -ieq 'check'; $verbose='%VERBOSE%' -eq '1'; $esc=[char]27; $found='['+$esc+'[38;5;114mFOUND'+$esc+'[0m]'; $jdkBins=@(); if (Test-Path -LiteralPath 'C:\Program Files\Eclipse Adoptium') { $jdkBins=Get-ChildItem -LiteralPath 'C:\Program Files\Eclipse Adoptium' -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'bin' } }; $c=@((Join-Path $root 'scripts'),'C:\Program Files\Git\cmd','C:\Program Files\Git\usr\bin','C:\Program Files\Git\mingw64\libexec\git-core','D:\software\programming\git\Git\cmd','D:\software\programming\git\Git\usr\bin','D:\software\programming\git\Git\mingw64\libexec\git-core','C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin') + $jdkBins; $e=$c | Where-Object { Test-Path -LiteralPath $_ }; if ($check) { if ($verbose) { Write-Host ($found+' Environment paths: '+(($e | ForEach-Object { $_ }) -join '; ')) } else { Write-Host \"[$($esc)[38;5;183mCHECK$($esc)[0m] Environment paths\" }; exit 0 }; $u=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $u) { $u='' }; $known=@($env:LOCALAPPDATA + '\Microsoft\WindowsApps') + $c; $known=$known | Where-Object { $_ } | Sort-Object Length -Descending -Unique; $parts=New-Object System.Collections.Generic.List[string]; foreach ($raw in ($u -split ';')) { $s=$raw.Trim(); while ($s) { $hit=$null; $hitAt=-1; foreach ($k in $known) { $i=$s.IndexOf($k, [StringComparison]::OrdinalIgnoreCase); if ($i -ge 0 -and ($hitAt -lt 0 -or $i -lt $hitAt -or ($i -eq $hitAt -and $k.Length -gt $hit.Length))) { $hit=$k; $hitAt=$i } }; if (-not $hit) { $parts.Add($s); break }; if ($hitAt -gt 0) { $prefix=$s.Substring(0,$hitAt).Trim(); if ($prefix) { $parts.Add($prefix) } }; $parts.Add($hit); $s=$s.Substring($hitAt + $hit.Length).Trim() } }; foreach ($p in $e) { $parts.Add($p) }; $clean=New-Object System.Collections.Generic.List[string]; foreach ($p in $parts) { $v=$p.Trim().TrimEnd('\'); if (-not $v) { continue }; $exists=$false; foreach ($x in $clean) { if ($x.TrimEnd('\') -ieq $v) { $exists=$true; break } }; if (-not $exists) { $clean.Add($v) } }; [Environment]::SetEnvironmentVariable('Path',($clean -join ';'),'User')"
 exit /b %ERRORLEVEL%
 
 :install_cmd_macros
@@ -574,7 +609,7 @@ call :cleanup_verify
 exit /b 1
 
 :ensure_spinner
-set "SPINNER_PY=%TEMP%\cp_setup_spinner_%RANDOM%_%RANDOM%.py"
+for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "Join-Path $env:TEMP ('cp_setup_spinner_' + [guid]::NewGuid().ToString('N') + '.py')"`) do set "SPINNER_PY=%%P"
 > "%SPINNER_PY%" echo import argparse
 >> "%SPINNER_PY%" echo import ctypes
 >> "%SPINNER_PY%" echo import subprocess
