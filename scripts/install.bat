@@ -3,6 +3,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 
 for /F "tokens=1 delims=#" %%A in ('"prompt #$E# & echo on & for %%B in (1) do rem"') do set "ESC=%%A"
 for %%I in ("%~dp0..") do set "ROOT=%%~fI"
+set "ORIGINAL_ARGS=%*"
 
 set "CHECK_ONLY=0"
 set "VERBOSE=0"
@@ -25,6 +26,12 @@ echo [%ESC%[31mFAILED%ESC%[0m] Unknown argument: %~1
 exit /b 1
 
 :parsed_args
+
+if "%CHECK_ONLY%"=="0" (
+    call :ensure_admin
+    if errorlevel 2 exit /b 0
+    if errorlevel 1 goto failed
+)
 
 echo CP setup root:
 echo %ROOT%
@@ -118,6 +125,44 @@ echo.
 echo [%ESC%[32mDONE%ESC%[0m] CP setup is ready.
 echo Restart terminals so updated User PATH and XDG_CONFIG_HOME are visible everywhere.
 exit /b 0
+
+:ensure_admin
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$id=[Security.Principal.WindowsIdentity]::GetCurrent(); $principal=[Security.Principal.WindowsPrincipal]::new($id); if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { exit 0 }; exit 1"
+if not errorlevel 1 exit /b 0
+
+set "ELEVATE_PS=%TEMP%\cp_setup_elevate_%RANDOM%_%RANDOM%.ps1"
+set "ELEVATE_LOG=%TEMP%\cp_setup_elevate.log"
+set "CP_INSTALL_SCRIPT=%~f0"
+set "CP_INSTALL_ARGS=%ORIGINAL_ARGS%"
+set "CP_INSTALL_CWD=%CD%"
+> "%ELEVATE_PS%" echo $ErrorActionPreference = 'Stop'
+>> "%ELEVATE_PS%" echo $label = 'Requesting administrator rights'
+>> "%ELEVATE_PS%" echo $log = $env:ELEVATE_LOG
+>> "%ELEVATE_PS%" echo $esc = [char]27
+>> "%ELEVATE_PS%" echo $cr = [char]13
+>> "%ELEVATE_PS%" echo $clear = $esc + '[2K'
+>> "%ELEVATE_PS%" echo $install = '[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'
+>> "%ELEVATE_PS%" echo Remove-Item -LiteralPath $log -ErrorAction SilentlyContinue
+>> "%ELEVATE_PS%" echo $cmd = '"' + $env:CP_INSTALL_SCRIPT + '" ' + $env:CP_INSTALL_ARGS
+>> "%ELEVATE_PS%" echo $job = Start-Job -ScriptBlock { param($comspec,$cmd,$cwd,$log) try { Start-Process -FilePath $comspec -ArgumentList @('/d','/k',$cmd) -WorkingDirectory $cwd -Verb RunAs; 0 } catch { $_ ^| Out-String ^| Set-Content -LiteralPath $log; 1 } } -ArgumentList $env:ComSpec,$cmd,$env:CP_INSTALL_CWD,$log
+>> "%ELEVATE_PS%" echo $frames = @([char]92,'-','/','^|')
+>> "%ELEVATE_PS%" echo $i = 0
+>> "%ELEVATE_PS%" echo while ($job.State -eq 'Running') { Write-Host -NoNewline ($cr + $clear + $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
+>> "%ELEVATE_PS%" echo $jobResult = Receive-Job -Wait $job
+>> "%ELEVATE_PS%" echo Remove-Job $job -Force
+>> "%ELEVATE_PS%" echo $items = @($jobResult)
+>> "%ELEVATE_PS%" echo if ($items.Count -eq 0) { $exitCode = 1 } else { $exitCode = [int]$items[-1] }
+>> "%ELEVATE_PS%" echo if ($exitCode -eq 0) { $result = 'OK' } else { $result = 'FAILED' }
+>> "%ELEVATE_PS%" echo Write-Host ($cr + $clear + $install + ' ' + $result + ' ' + $label)
+>> "%ELEVATE_PS%" echo exit $exitCode
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ELEVATE_PS%"
+set "ELEVATE_EXIT=%ERRORLEVEL%"
+del "%ELEVATE_PS%" >nul 2>nul
+if not "%ELEVATE_EXIT%"=="0" (
+    if exist "%ELEVATE_LOG%" type "%ELEVATE_LOG%"
+    exit /b 1
+)
+exit /b 2
 
 :need_or_install
 where "%~1" >nul 2>nul
