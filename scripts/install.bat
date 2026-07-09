@@ -143,11 +143,13 @@ if not errorlevel 1 exit /b 0
 set "ELEVATE_PS=%TEMP%\cp_setup_elevate_%RANDOM%_%RANDOM%.ps1"
 set "ELEVATE_LOG=%TEMP%\cp_setup_elevate.log"
 set "ELEVATE_EXIT_FILE=%TEMP%\cp_setup_elevate_exit_%RANDOM%_%RANDOM%.txt"
+set "ELEVATE_STARTED_FILE=%TEMP%\cp_setup_elevate_started_%RANDOM%_%RANDOM%.txt"
 set "CP_INSTALL_SCRIPT=%~f0"
 set "CP_INSTALL_ARGS=%ORIGINAL_ARGS%"
 set "CP_INSTALL_CWD=%ROOT%"
 > "%ELEVATE_PS%" echo $ErrorActionPreference = 'Stop'
->> "%ELEVATE_PS%" echo $label = 'Requesting administrator rights'
+>> "%ELEVATE_PS%" echo $requestLabel = 'Requesting administrator rights...'
+>> "%ELEVATE_PS%" echo $installLabel = 'Administrator rights granted, installing...'
 >> "%ELEVATE_PS%" echo $log = $env:ELEVATE_LOG
 >> "%ELEVATE_PS%" echo $esc = [char]27
 >> "%ELEVATE_PS%" echo $cr = [char]13
@@ -156,21 +158,23 @@ set "CP_INSTALL_CWD=%ROOT%"
 >> "%ELEVATE_PS%" echo $red = $esc + '[31m'
 >> "%ELEVATE_PS%" echo $reset = $esc + '[0m'
 >> "%ELEVATE_PS%" echo $exitFile = $env:ELEVATE_EXIT_FILE
->> "%ELEVATE_PS%" echo Remove-Item -LiteralPath $log,$exitFile -ErrorAction SilentlyContinue
+>> "%ELEVATE_PS%" echo $startedFile = $env:ELEVATE_STARTED_FILE
+>> "%ELEVATE_PS%" echo Remove-Item -LiteralPath $log,$exitFile,$startedFile -ErrorAction SilentlyContinue
 >> "%ELEVATE_PS%" echo $cmd = 'cd /d "' + $env:CP_INSTALL_CWD + '" ^&^& call "' + $env:CP_INSTALL_SCRIPT + '" ' + $env:CP_INSTALL_ARGS + ' ^& set "CP_SETUP_EXIT=!ERRORLEVEL!" ^& ^> "' + $exitFile + '" echo !CP_SETUP_EXIT! ^& echo. ^& echo Press any key to exit... ^& pause ^>nul ^& exit /b !CP_SETUP_EXIT!'
->> "%ELEVATE_PS%" echo $job = Start-Job -ScriptBlock { param($comspec,$cmd,$cwd,$log) try { $p = Start-Process -FilePath $comspec -ArgumentList @('/d','/v:on','/c',$cmd) -WorkingDirectory $cwd -Verb RunAs -PassThru; $p.WaitForExit(); 0 } catch { $_ ^| Out-String ^| Set-Content -LiteralPath $log; 1 } } -ArgumentList $env:ComSpec,$cmd,$env:CP_INSTALL_CWD,$log
+>> "%ELEVATE_PS%" echo $job = Start-Job -ScriptBlock { param($comspec,$cmd,$cwd,$log,$startedFile) try { $p = Start-Process -FilePath $comspec -ArgumentList @('/d','/v:on','/c',$cmd) -WorkingDirectory $cwd -Verb RunAs -PassThru; 'started' ^| Set-Content -LiteralPath $startedFile; $p.WaitForExit(); 0 } catch { $_ ^| Out-String ^| Set-Content -LiteralPath $log; 1 } } -ArgumentList $env:ComSpec,$cmd,$env:CP_INSTALL_CWD,$log,$startedFile
 >> "%ELEVATE_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%ELEVATE_PS%" echo $i = 0
->> "%ELEVATE_PS%" echo while ($job.State -eq 'Running') { Write-Host -NoNewline ($cr + $clear + $frames[$i %% $frames.Count] + ' ' + $label); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
+>> "%ELEVATE_PS%" echo while ($job.State -eq 'Running') { if (Test-Path -LiteralPath $startedFile) { $label = $installLabel } else { $label = $requestLabel }; Write-Host -NoNewline ($cr + $clear + $frames[$i %% $frames.Count] + ' ' + $label); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
 >> "%ELEVATE_PS%" echo $jobResult = Receive-Job -Wait $job
 >> "%ELEVATE_PS%" echo Remove-Job $job -Force
 >> "%ELEVATE_PS%" echo $items = @($jobResult)
->> "%ELEVATE_PS%" echo if ($items.Count -eq 0 -or [int]$items[-1] -ne 0) { Write-Host ($cr + $clear + $red + 'Install failed' + $reset); exit 1 }
->> "%ELEVATE_PS%" echo if (-not (Test-Path -LiteralPath $exitFile)) { Write-Host ($cr + $clear + $red + 'Install failed' + $reset); exit 1 }
+>> "%ELEVATE_PS%" echo Remove-Item -LiteralPath $startedFile -ErrorAction SilentlyContinue
+>> "%ELEVATE_PS%" echo if ($items.Count -eq 0 -or [int]$items[-1] -ne 0) { Write-Host ($cr + $clear + $red + 'Install failed' + $reset); if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log }; exit 1 }
+>> "%ELEVATE_PS%" echo if (-not (Test-Path -LiteralPath $exitFile)) { Write-Host ($cr + $clear + $red + 'Install failed: installer did not report an exit code.' + $reset); exit 1 }
 >> "%ELEVATE_PS%" echo $childExit = [int]((Get-Content -LiteralPath $exitFile -ErrorAction Stop ^| Select-Object -First 1).Trim())
 >> "%ELEVATE_PS%" echo Remove-Item -LiteralPath $exitFile -ErrorAction SilentlyContinue
->> "%ELEVATE_PS%" echo if ($childExit -eq 0) { Write-Host ($cr + $clear + $green + 'Install completed successfully' + $reset); exit 0 }
->> "%ELEVATE_PS%" echo Write-Host ($cr + $clear + $red + 'Install failed' + $reset)
+>> "%ELEVATE_PS%" echo if ($childExit -eq 0) { Write-Host ($cr + $clear + $green + 'Install completed (see README for more info)' + $reset); exit 0 }
+>> "%ELEVATE_PS%" echo Write-Host ($cr + $clear + $red + ('Install failed: elevated installer exited with code ' + $childExit) + $reset)
 >> "%ELEVATE_PS%" echo exit 1
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ELEVATE_PS%"
 set "ELEVATE_EXIT=%ERRORLEVEL%"
@@ -197,7 +201,7 @@ call :require_winget
 if errorlevel 1 exit /b 1
 
 if "%VERBOSE%"=="1" (
-    echo [%ESC%[38;5;153mINSTALL%ESC%[0m] %~3 via winget: %~2
+    echo [%ESC%[38;5;153mINSTALLING%ESC%[0m] %~3 via winget: %~2
     "%WINGET%" install --id %~2 %WINGET_ARGS%
 ) else (
     set "INSTALL_CMD=!WINGET! install --id %~2 %WINGET_QUIET_ARGS%"
@@ -260,7 +264,7 @@ if errorlevel 1 exit /b 1
 call :find_msys2_shell
 if errorlevel 1 (
     if "%VERBOSE%"=="1" (
-        echo [%ESC%[38;5;153mINSTALL%ESC%[0m] MSYS2 via winget: MSYS2.MSYS2
+        echo [%ESC%[38;5;153mINSTALLING%ESC%[0m] MSYS2 via winget: MSYS2.MSYS2
         "%WINGET%" install --id MSYS2.MSYS2 %WINGET_ARGS%
     ) else (
         set "INSTALL_CMD=!WINGET! install --id MSYS2.MSYS2 %WINGET_QUIET_ARGS%"
@@ -275,7 +279,7 @@ if errorlevel 1 (
     )
 )
 if "%VERBOSE%"=="1" (
-    echo [%ESC%[38;5;153mINSTALL%ESC%[0m] MSYS2 toolchain via pacman
+    echo [%ESC%[38;5;153mINSTALLING%ESC%[0m] MSYS2 toolchain via pacman
     powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; $bash=Join-Path (Split-Path -Parent $shell) 'usr\bin\bash.exe'; if (-not (Test-Path -LiteralPath $bash)) { throw 'Could not find MSYS2 bash.exe after installing MSYS2.' }; $env:MSYSTEM='MINGW64'; $env:CHERE_INVOKING='enabled_from_arguments'; & $bash -lc 'pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }"
 ) else (
     call :run_pacman_spinner
@@ -298,7 +302,7 @@ set "SPIN_PS=%TEMP%\cp_setup_pacman_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $esc = [char]27
 >> "%SPIN_PS%" echo $cr = [char]13
 >> "%SPIN_PS%" echo $clear = $esc + '[2K'
->> "%SPIN_PS%" echo $install = '[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'
+>> "%SPIN_PS%" echo $install = '[' + $esc + '[38;5;153mINSTALLING' + $esc + '[0m]'
 >> "%SPIN_PS%" echo $installed = '[' + $esc + '[38;5;114mINSTALLED' + $esc + '[0m]'
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $log,$wrapper -ErrorAction SilentlyContinue
 >> "%SPIN_PS%" echo $shell = $null
@@ -342,7 +346,7 @@ set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $esc = [char]27
 >> "%SPIN_PS%" echo $cr = [char]13
 >> "%SPIN_PS%" echo $clear = $esc + '[2K'
->> "%SPIN_PS%" echo $install = '[' + $esc + '[38;5;153mINSTALL' + $esc + '[0m]'
+>> "%SPIN_PS%" echo $install = '[' + $esc + '[38;5;153mINSTALLING' + $esc + '[0m]'
 >> "%SPIN_PS%" echo $installed = '[' + $esc + '[38;5;114mINSTALLED' + $esc + '[0m]'
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $log,$wrapper -ErrorAction SilentlyContinue
 >> "%SPIN_PS%" echo $runLine = [string]('call ' + $cmd + ' 1^>' + $q + $log + $q + ' 2^>^&1')
