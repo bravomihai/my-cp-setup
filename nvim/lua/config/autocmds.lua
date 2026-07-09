@@ -8,9 +8,16 @@
 -- e.g. vim.api.nvim_del_augroup_by_name("lazyvim_wrap_spell")
 -- auto format
 vim.api.nvim_create_autocmd("BufWritePre", {
-    pattern = { "*.cpp", "*.h", "*.hpp", "*.c" },
+    pattern = { "*.cpp", "*.h", "*.hpp", "*.c", "*.py", "*.java" },
     callback = function()
-        vim.lsp.buf.format({ async = false })
+        if vim.bo.filetype == "python" or vim.bo.filetype == "java" then
+            local ok, conform = pcall(require, "conform")
+            if ok then
+                conform.format({ async = false })
+            end
+        else
+            vim.lsp.buf.format({ async = false })
+        end
     end,
 })
 

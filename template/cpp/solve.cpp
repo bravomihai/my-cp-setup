@@ -1,12 +1,9 @@
-// clang-format off
 #include <my_libraries/cp.hpp>
 #include <atcoder/all>
 
 using namespace std;
 using namespace atcoder;
-//-------------------------------------------------------------------------
 
-// clang-format on
 void solve() {
     cout << "Hello, World!\n";
 }

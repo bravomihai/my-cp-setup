@@ -63,7 +63,13 @@ if not errorlevel 1 (
 )
 
 if "%CHECK_ONLY%"=="1" (
-    call :install_paths check
+    if "%VERBOSE%"=="1" (
+        call :install_paths check
+        if errorlevel 1 goto failed
+        call :print_found "Environment paths"
+    ) else (
+        call :check_env_paths
+    )
 ) else (
     call :install_paths
 )
@@ -77,7 +83,7 @@ if errorlevel 1 (
 
 call :find_python
 if not errorlevel 1 (
-    rem Python is available.
+    if "%CHECK_ONLY%"=="1" call :print_found "Python"
 ) else if "%CHECK_ONLY%"=="1" (
     echo [%ESC%[33mMISSING%ESC%[0m] Python 3
     goto failed
@@ -105,8 +111,6 @@ if "%CHECK_ONLY%"=="0" (
     set "CP_SETUP_ROOT=%ROOT%"
     call :install_cmd_macros
     if errorlevel 1 goto failed
-) else (
-    echo [%ESC%[38;5;183mCHECK%ESC%[0m] Environment writes skipped.
 )
 
 if exist "%ROOT%\.git" where git >nul 2>nul
@@ -167,6 +171,7 @@ exit /b 2
 :need_or_install
 where "%~1" >nul 2>nul
 if not errorlevel 1 (
+    if "%CHECK_ONLY%"=="1" call :print_found "%~3"
     exit /b 0
 )
 
@@ -205,6 +210,10 @@ exit /b 1
 :print_found
 echo [%ESC%[38;5;114mFOUND%ESC%[0m] %~1
 exit /b 0
+
+:check_env_paths
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $esc=[char]27; $cr=[char]13; $clear=$esc+'[2K'; $check='['+$esc+'[38;5;183mCHECK'+$esc+'[0m]'; $found='['+$esc+'[38;5;114mFOUND'+$esc+'[0m]'; $failed='['+$esc+'[31mFAILED'+$esc+'[0m]'; $job=Start-Job -ScriptBlock { param($root) $c=@((Join-Path $root 'scripts'),'C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin'); $e=$c | Where-Object { Test-Path -LiteralPath $_ }; if (@($e).Count -gt 0) { 0 } else { 1 } } -ArgumentList $root; $frames=@([char]92,'-','/','|'); $i=0; while ($job.State -eq 'Running') { Write-Host -NoNewline ($cr+$clear+$check+' '+$frames[$i %% $frames.Count]+' Environment paths'); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }; $items=@(Receive-Job -Wait $job); Remove-Job $job -Force; if ($items.Count -eq 0) { $exitCode=1 } else { $exitCode=[int]$items[-1] }; if ($exitCode -eq 0) { Write-Host ($cr+$clear+$found+' Environment paths') } else { Write-Host ($cr+$clear+$failed+' Environment paths') }; exit $exitCode"
+exit /b %ERRORLEVEL%
 
 :require_winget
 set "WINGET="
