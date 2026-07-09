@@ -70,7 +70,7 @@ if errorlevel 1 (
 
 call :find_python
 if not errorlevel 1 (
-    call :print_found "Python"
+    rem Python is available.
 ) else if "%CHECK_ONLY%"=="1" (
     echo [%ESC%[33mMISSING%ESC%[0m] Python 3
     goto failed
@@ -104,8 +104,10 @@ if "%CHECK_ONLY%"=="0" (
 
 if exist "%ROOT%\.git" where git >nul 2>nul
 if not errorlevel 1 if exist "%ROOT%\.git" (
+    echo.
     git -C "%ROOT%" submodule update --init libraries/ac-library
     if errorlevel 1 goto failed
+    echo.
 )
 
 echo Verifying setup...
