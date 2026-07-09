@@ -104,6 +104,15 @@ if "%CHECK_ONLY%"=="1" (
 if errorlevel 1 goto failed
 call :refresh_path
 
+if exist "%ROOT%\.git" (
+    if "%CHECK_ONLY%"=="1" (
+        call :check_ac_library
+    ) else (
+        call :update_ac_library
+    )
+    if errorlevel 1 goto failed
+)
+
 if "%CHECK_ONLY%"=="1" if not "%MISSING_COUNT%"=="0" goto check_missing
 
 if "%CHECK_ONLY%"=="0" (
@@ -119,14 +128,6 @@ if "%CHECK_ONLY%"=="0" (
     set "CP_SETUP_ROOT=%ROOT%"
     call :install_cmd_macros
     if errorlevel 1 goto failed
-)
-
-if exist "%ROOT%\.git" where git >nul 2>nul
-if not errorlevel 1 if exist "%ROOT%\.git" (
-    echo.
-    git -C "%ROOT%" submodule update --init libraries/ac-library
-    if errorlevel 1 goto failed
-    echo.
 )
 
 echo Verifying setup...
@@ -293,6 +294,35 @@ exit /b 0
 :print_missing
 set /A MISSING_COUNT+=1
 echo [%ESC%[33mMISSING%ESC%[0m] %~1
+exit /b 0
+
+:check_ac_library
+where git >nul 2>nul
+if errorlevel 1 exit /b 0
+if not exist "%ROOT%\.gitmodules" exit /b 0
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $path=Join-Path $root 'libraries\ac-library'; $esc=[char]27; $found='['+$esc+'[38;5;114mFOUND'+$esc+'[0m]'; $missing='['+$esc+'[33mMISSING'+$esc+'[0m]'; if (-not (Test-Path -LiteralPath (Join-Path $path '.git'))) { Write-Host ($missing+' ac-library update'); exit 2 }; $local=(& git -C $path rev-parse HEAD 2>$null); if ($LASTEXITCODE -ne 0 -or -not $local) { Write-Host ($missing+' ac-library update'); exit 2 }; $remote=(& git -C $path ls-remote origin HEAD 2>$null); if ($LASTEXITCODE -ne 0 -or -not $remote) { Write-Host ($missing+' ac-library remote check'); exit 2 }; $remoteHead=($remote -split '\s+')[0]; if ($local.Trim() -ieq $remoteHead.Trim()) { Write-Host ($found+' ac-library') } else { Write-Host ($missing+' ac-library update') ; exit 2 }"
+if errorlevel 2 (
+    set /A MISSING_COUNT+=1
+    exit /b 0
+)
+exit /b %ERRORLEVEL%
+
+:update_ac_library
+where git >nul 2>nul
+if errorlevel 1 exit /b 0
+if not exist "%ROOT%\.gitmodules" exit /b 0
+if "%VERBOSE%"=="1" (
+    echo [%ESC%[38;5;153mINSTALLING%ESC%[0m] ac-library submodule
+    git -C "%ROOT%" submodule update --init --remote libraries/ac-library
+) else (
+    set "INSTALL_CMD=git -C "%ROOT%" submodule update --init --remote libraries/ac-library"
+    call :run_install_spinner "ac-library submodule" "" "%TEMP%\cp_setup_git.log"
+)
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] ac-library submodule update failed.
+    if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_git.log
+    exit /b 1
+)
 exit /b 0
 
 :check_env_paths

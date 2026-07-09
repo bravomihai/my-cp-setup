@@ -19,6 +19,7 @@ scripts\install.bat --check
 ```
 
 If `--check` reports missing components, run the installer without `--check` to install them.
+For `ac-library`, `--check` only reports whether the submodule needs an update; normal install updates it.
 
 Remove only the environment entries added by this setup:
 
@@ -42,6 +43,7 @@ scripts\install.bat
 - `javac`
 - `g++`
 - usable Python 3, preferring MSYS2 Python and ignoring the Microsoft Store `WindowsApps` alias
+- `ac-library` submodule state
 
 If a tool is missing during a normal install, it tries to install it with `winget`. Existing Git is kept silent during normal installs; if Git is missing, the installer shows it like the other install steps. For C++ and Python, it installs MSYS2 externally and installs only the CP toolchain with `pacman`: GCC, GDB, clang tools, and Python.
 
@@ -52,7 +54,7 @@ The installer also:
 - sets `CP_SETUP_ROOT` to the repository root
 - sets `CP_PYTHON` to the real Python executable used by the setup
 - configures CMD DOSKEY macros from `scripts\cp_macros`
-- initializes the `ac-library` submodule
+- initializes and updates the `ac-library` submodule
 - verifies C++, Java, Python, and expansion for all three languages
 
 External tools are not stored in this repository.
