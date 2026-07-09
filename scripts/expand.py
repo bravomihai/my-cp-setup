@@ -6,13 +6,12 @@ import sys
 from pathlib import Path
 
 
-GREEN = "\033[32m"
 RED = "\033[31m"
 RESET = "\033[0m"
 
 
 def done(message: str) -> None:
-    print(f"[{GREEN}DONE{RESET}] {message}")
+    print(message)
 
 
 def failed(message: str) -> None:
