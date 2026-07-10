@@ -202,15 +202,41 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$macros=$env:MACROS; $es
 exit /b %ERRORLEVEL%
 
 :remove_external_components
-call :uninstall_git
-if errorlevel 1 exit /b 1
-call :uninstall_winget_component "Neovim" "Neovim.Neovim" "nvim" "Winget.Neovim" "Neovim and generated LazyVim data"
-if errorlevel 1 exit /b 1
-call :uninstall_winget_component "JDK" "EclipseAdoptium.Temurin.21.JDK" "javac" "Winget.JDK"
-if errorlevel 1 exit /b 1
+call :state_has "Winget.Git"
+if not errorlevel 1 (
+    call :uninstall_git
+    if errorlevel 1 exit /b 1
+) else (
+    call :report_unmanaged_command "Git" "git"
+)
 
+call :state_has "Winget.Neovim"
+if not errorlevel 1 (
+    call :uninstall_winget_component "Neovim" "Neovim.Neovim" "nvim" "Winget.Neovim" "Neovim and generated LazyVim data"
+    if errorlevel 1 exit /b 1
+) else (
+    call :report_unmanaged_command "Neovim" "nvim"
+)
+
+call :state_has "Winget.JDK"
+if not errorlevel 1 (
+    call :uninstall_winget_component "JDK" "EclipseAdoptium.Temurin.21.JDK" "javac" "Winget.JDK"
+    if errorlevel 1 exit /b 1
+) else (
+    call :report_unmanaged_command "JDK" "javac"
+)
+
+call :state_has "Winget.MSYS2"
+if errorlevel 1 (
+    call :report_unmanaged_msys2
+    goto maybe_pacman
+)
 call :find_msys2_shell
-if errorlevel 1 exit /b 0
+if errorlevel 1 (
+    call :clear_state "Winget.MSYS2"
+    call :clear_state "Pacman.Toolchain"
+    exit /b 0
+)
 
 call :ask_yes_no "Uninstall MSYS2 and its CP toolchain"
 if errorlevel 1 (
@@ -228,8 +254,13 @@ echo.
 exit /b 0
 
 :maybe_pacman
-call :has_pacman_toolchain
+call :state_has "Pacman.Toolchain"
 if errorlevel 1 exit /b 0
+call :has_pacman_toolchain
+if errorlevel 1 (
+    call :clear_state "Pacman.Toolchain"
+    exit /b 0
+)
 call :uninstall_pacman_toolchain
 exit /b %ERRORLEVEL%
 
@@ -238,18 +269,24 @@ call :state_has "Winget.Git"
 if not errorlevel 1 (
     call :uninstall_git
     if errorlevel 1 exit /b 1
+) else (
+    call :report_unmanaged_command "Git" "git"
 )
 
 call :state_has "Winget.Neovim"
 if not errorlevel 1 (
     call :uninstall_winget_component "Neovim" "Neovim.Neovim" "nvim" "Winget.Neovim" "Neovim and generated LazyVim data"
     if errorlevel 1 exit /b 1
+) else (
+    call :report_unmanaged_command "Neovim" "nvim"
 )
 
 call :state_has "Winget.JDK"
 if not errorlevel 1 (
     call :uninstall_winget_component "JDK" "EclipseAdoptium.Temurin.21.JDK" "javac" "Winget.JDK"
     if errorlevel 1 exit /b 1
+) else (
+    call :report_unmanaged_command "JDK" "javac"
 )
 
 call :state_has "Winget.MSYS2"
@@ -268,6 +305,8 @@ if not errorlevel 1 (
     exit /b 0
 )
 
+call :report_unmanaged_msys2
+
 call :state_has "Pacman.Toolchain"
 if not errorlevel 1 (
     call :find_msys2_shell
@@ -277,13 +316,19 @@ if not errorlevel 1 (
         call :uninstall_pacman_toolchain
         if errorlevel 1 exit /b 1
     )
+) else if defined MSYS2_SHELL (
+    call :has_pacman_toolchain
+    if not errorlevel 1 (
+        echo [%ESC%[38;5;244mKEPT%ESC%[0m] MSYS2 CP toolchain was not installed by CP setup.
+        echo.
+    )
 )
 exit /b 0
 
 :uninstall_winget_component
 call :search_command "%~1" "where.exe %~3" "FOUND_COMPONENT_PATH"
 if errorlevel 1 (
-    if "%ALL_MODE%"=="1" call :clear_state "%~4"
+    call :clear_state "%~4"
     if "%ALL_MODE%"=="1" if /I "%~4"=="Winget.Neovim" call :remove_nvim_generated_data
     exit /b 0
 )
@@ -291,11 +336,13 @@ if errorlevel 1 (
 call :winget_has_package "%~2"
 if errorlevel 1 (
     if "%ALL_MODE%"=="1" (
-        echo [%ESC%[31mFAILED%ESC%[0m] %~1 is marked as installed by setup but is not registered with winget.
-        exit /b 1
+        echo [%ESC%[38;5;244mKEPT%ESC%[0m] %~1 is not registered with winget.
+        call :clear_state "%~4"
+        echo.
+        exit /b 0
     )
     echo [%ESC%[38;5;244mKEPT%ESC%[0m] %~1 is not registered with winget.
-    set "CAN_REMOVE_REPO=0"
+    call :clear_state "%~4"
     echo.
     exit /b 0
 )
@@ -322,10 +369,24 @@ if /I "%~4"=="Winget.Neovim" (
 echo.
 exit /b 0
 
+:report_unmanaged_command
+call :search_command "%~1" "where.exe %~2" "UNMANAGED_COMPONENT_PATH"
+if errorlevel 1 exit /b 0
+echo [%ESC%[38;5;244mKEPT%ESC%[0m] %~1 was not installed by CP setup.
+echo.
+exit /b 0
+
+:report_unmanaged_msys2
+call :find_msys2_shell
+if errorlevel 1 exit /b 0
+echo [%ESC%[38;5;244mKEPT%ESC%[0m] MSYS2 was not installed by CP setup.
+echo.
+exit /b 0
+
 :uninstall_git
 call :search_command "Git" "where.exe git" "FOUND_GIT_PATH"
 if errorlevel 1 (
-    if "%ALL_MODE%"=="1" call :clear_state "Winget.Git"
+    call :clear_state "Winget.Git"
     exit /b 0
 )
 
@@ -420,8 +481,13 @@ call :remove_pacman_toolchain_now
 exit /b %ERRORLEVEL%
 
 :remove_pacman_toolchain_if_present
-call :has_pacman_toolchain
+call :state_has "Pacman.Toolchain"
 if errorlevel 1 exit /b 0
+call :has_pacman_toolchain
+if errorlevel 1 (
+    call :clear_state "Pacman.Toolchain"
+    exit /b 0
+)
 call :remove_pacman_toolchain_now
 exit /b %ERRORLEVEL%
 
