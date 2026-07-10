@@ -166,7 +166,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$macros=$env:MACROS; $es
 exit /b %ERRORLEVEL%
 
 :remove_external_components
-call :uninstall_winget_component "Git" "Git.Git" "git" "Winget.Git"
+call :uninstall_git
 if errorlevel 1 exit /b 1
 call :uninstall_winget_component "Neovim" "Neovim.Neovim" "nvim" "Winget.Neovim" "Neovim, CP config, and LazyVim data"
 if errorlevel 1 exit /b 1
@@ -224,6 +224,36 @@ if /I "%~4"=="Winget.Neovim" (
 )
 echo.
 exit /b 0
+
+:uninstall_git
+call :search_command "Git" "where.exe git" "FOUND_GIT_PATH"
+if errorlevel 1 exit /b 0
+
+for %%I in ("%FOUND_GIT_PATH%") do set "GIT_BIN=%%~dpI"
+for %%I in ("%GIT_BIN%\..") do set "GIT_ROOT=%%~fI"
+if not exist "%GIT_ROOT%\unins000.exe" goto uninstall_git_winget
+
+call :ask_yes_no "Uninstall Git"
+if errorlevel 1 (
+    echo [%ESC%[38;5;244mKEPT%ESC%[0m] Git
+    echo.
+    exit /b 0
+)
+
+set "UNINSTALL_CMD="%GIT_ROOT%\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+call :run_command_spinner "Git" "" "%TEMP%\cp_setup_git_uninstall.log" "UNINSTALLING" "UNINSTALLED"
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] Git native uninstall failed.
+    echo Log: %TEMP%\cp_setup_git_uninstall.log
+    exit /b 1
+)
+call :clear_state "Winget.Git"
+echo.
+exit /b 0
+
+:uninstall_git_winget
+call :uninstall_winget_component "Git" "Git.Git" "git" "Winget.Git"
+exit /b %ERRORLEVEL%
 
 :uninstall_winget_now
 call :require_winget
