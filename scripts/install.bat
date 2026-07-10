@@ -599,7 +599,7 @@ if not defined CP_PYTHON (
 powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('CP_SETUP_ROOT', '%ROOT%', 'User'); [Environment]::SetEnvironmentVariable('CP_PYTHON', '%CP_PYTHON%', 'User')"
 if errorlevel 1 exit /b 1
 set "CP_SETUP_ROOT=%ROOT%"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$key='HKCU:\Software\Microsoft\Command Processor'; $command='doskey /macrofile=\"'+$env:MACROS+'\"'; $current=(Get-ItemProperty -Path $key -Name AutoRun -ErrorAction SilentlyContinue).AutoRun; if (-not $current) { Set-ItemProperty -Path $key -Name AutoRun -Value $command } elseif ($current.IndexOf($command,[StringComparison]::OrdinalIgnoreCase) -lt 0) { Set-ItemProperty -Path $key -Name AutoRun -Value ($current.TrimEnd()+' & '+$command) }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$key='HKCU:\Software\Microsoft\Command Processor'; if (-not (Test-Path -LiteralPath $key)) { New-Item -Path $key -Force | Out-Null }; $command='doskey /macrofile=\"'+$env:MACROS+'\"'; $current=(Get-ItemProperty -Path $key -Name AutoRun -ErrorAction SilentlyContinue).AutoRun; if (-not $current) { Set-ItemProperty -Path $key -Name AutoRun -Value $command } elseif ($current.IndexOf($command,[StringComparison]::OrdinalIgnoreCase) -lt 0) { Set-ItemProperty -Path $key -Name AutoRun -Value ($current.TrimEnd()+' & '+$command) }"
 if errorlevel 1 (
     echo Failed to update cmd AutoRun.
     exit /b 1
