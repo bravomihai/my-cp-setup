@@ -168,13 +168,20 @@ exit /b %ERRORLEVEL%
 :remove_external_components
 call :uninstall_winget_component "Git" "Git.Git" "git" "Winget.Git"
 if errorlevel 1 exit /b 1
-call :uninstall_winget_component "Neovim" "Neovim.Neovim" "nvim" "Winget.Neovim"
+call :uninstall_winget_component "Neovim" "Neovim.Neovim" "nvim" "Winget.Neovim" "Neovim, CP config, and LazyVim data"
 if errorlevel 1 exit /b 1
 call :uninstall_winget_component "JDK" "EclipseAdoptium.Temurin.21.JDK" "javac" "Winget.JDK"
 if errorlevel 1 exit /b 1
 
 call :find_msys2_shell
 if errorlevel 1 exit /b 0
+
+call :winget_has_package "MSYS2.MSYS2"
+if errorlevel 1 (
+    echo [%ESC%[38;5;244mKEPT%ESC%[0m] MSYS2 is not registered with winget.
+    echo.
+    goto maybe_pacman
+)
 
 call :ask_yes_no "Uninstall MSYS2 and its CP toolchain"
 if errorlevel 1 (
@@ -199,7 +206,16 @@ exit /b %ERRORLEVEL%
 call :search_command "%~1" "where.exe %~3" "FOUND_COMPONENT_PATH"
 if errorlevel 1 exit /b 0
 
-call :ask_yes_no "Uninstall %~1"
+call :winget_has_package "%~2"
+if errorlevel 1 (
+    echo [%ESC%[38;5;244mKEPT%ESC%[0m] %~1 is not registered with winget.
+    echo.
+    exit /b 0
+)
+
+set "UNINSTALL_PROMPT=%~5"
+if not defined UNINSTALL_PROMPT set "UNINSTALL_PROMPT=%~1"
+call :ask_yes_no "Uninstall %UNINSTALL_PROMPT%"
 if errorlevel 1 (
     echo [%ESC%[38;5;244mKEPT%ESC%[0m] %~1
     echo.
@@ -209,6 +225,10 @@ if errorlevel 1 (
 call :uninstall_winget_now "%~1" "%~2"
 if errorlevel 1 exit /b 1
 call :clear_state "%~4"
+if /I "%~4"=="Winget.Neovim" (
+    call :remove_nvim_data
+    if errorlevel 1 exit /b 1
+)
 echo.
 exit /b 0
 
@@ -216,7 +236,7 @@ exit /b 0
 call :require_winget
 if errorlevel 1 exit /b 1
 set "UNINSTALL_CMD="%WINGET%" uninstall --id %~2 --exact --source winget --disable-interactivity --silent"
-call :run_command_spinner "%~1 via winget: %~2" "" "%TEMP%\cp_setup_winget_uninstall.log" "UNINSTALLING" "UNINSTALLED"
+call :run_command_spinner "%~1" "" "%TEMP%\cp_setup_winget_uninstall.log" "UNINSTALLING" "UNINSTALLED"
 if not errorlevel 1 exit /b 0
 echo [%ESC%[31mFAILED%ESC%[0m] winget uninstall failed for %~1.
 echo Log: %TEMP%\cp_setup_winget_uninstall.log
@@ -235,7 +255,7 @@ if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] MSYS2 was not found; the toolchain cannot be removed with pacman.
     exit /b 1
 )
-set "PACMAN_COMMAND=pacman -Rns --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python"
+set "PACMAN_COMMAND=pacman -Rns --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python && (pacman -Rns --noconfirm mingw-w64-x86_64-ruff > /dev/null 2>&1 || true)"
 call :run_pacman_spinner "UNINSTALLING" "UNINSTALLED"
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] pacman toolchain uninstall failed.
@@ -262,6 +282,10 @@ for %%V in (Winget.Git Winget.Neovim Winget.JDK Winget.MSYS2 Pacman.Toolchain) d
 reg delete "%STATE_KEY%" /f >nul 2>nul
 exit /b 0
 
+:remove_nvim_data
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $esc=[char]27; $removed='['+$esc+'[38;5;114mREMOVED'+$esc+'[0m]'; $targets=@((Join-Path $root 'nvim'),(Join-Path $env:LOCALAPPDATA 'nvim-data')); foreach ($target in $targets) { if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop; Write-Host ($removed+' '+$target) } }"
+exit /b %ERRORLEVEL%
+
 :ask_yes_no
 setlocal EnableExtensions EnableDelayedExpansion
 :ask_yes_no_again
@@ -284,6 +308,14 @@ for /F "usebackq delims=" %%P in (`where winget 2^>nul`) do if not defined WINGE
 if not defined WINGET if exist "%LOCALAPPDATA%\Microsoft\WindowsApps\winget.exe" set "WINGET=%LOCALAPPDATA%\Microsoft\WindowsApps\winget.exe"
 if defined WINGET exit /b 0
 echo [%ESC%[31mFAILED%ESC%[0m] winget was not found.
+exit /b 1
+
+:winget_has_package
+call :require_winget
+if errorlevel 1 exit /b 1
+set "WINGET_PACKAGE="
+for /F "usebackq delims=" %%P in (`"%WINGET%" list --id %~1 --exact --source winget --disable-interactivity 2^>nul ^| findstr /I /C:"%~1"`) do set "WINGET_PACKAGE=%%P"
+if defined WINGET_PACKAGE exit /b 0
 exit /b 1
 
 :find_msys2_shell

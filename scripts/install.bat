@@ -97,6 +97,9 @@ if errorlevel 1 (
     )
 )
 
+call :ensure_ruff
+if errorlevel 1 goto failed
+
 if "%CHECK_ONLY%"=="1" (
     if "%VERBOSE%"=="1" (
         call :install_paths check
@@ -117,7 +120,7 @@ if exist "%ROOT%\.git" (
         call :check_ac_library
     ) else (
         echo Installing libraries...
-        call :update_ac_library
+        call :update_ac_library_if_needed
     )
     if errorlevel 1 goto failed
     echo.
@@ -382,27 +385,40 @@ del "%SEARCH_RESULT_FILE%" >nul 2>nul
 endlocal & set "%~3=%SEARCH_VALUE%" & exit /b %SEARCH_EXIT%
 
 :check_ac_library
+call :ac_library_needs_update
+if errorlevel 1 exit /b 1
+if "%AC_LIBRARY_NEEDS_UPDATE%"=="1" call :print_missing "ac-library update"
+exit /b 0
+
+:update_ac_library_if_needed
+call :ac_library_needs_update
+if errorlevel 1 exit /b 1
+if "%AC_LIBRARY_NEEDS_UPDATE%"=="0" exit /b 0
+call :update_ac_library
+exit /b %ERRORLEVEL%
+
+:ac_library_needs_update
+set "AC_LIBRARY_NEEDS_UPDATE=0"
 if not defined FOUND_GIT_PATH exit /b 0
 if not exist "%ROOT%\.gitmodules" exit /b 0
 set "AC_LIBRARY_PATH=%ROOT%\libraries\ac-library"
 if not exist "%AC_LIBRARY_PATH%\.git" (
-    call :print_missing "ac-library update"
+    set "AC_LIBRARY_NEEDS_UPDATE=1"
     exit /b 0
 )
 set "AC_LIBRARY_LOCAL="
 for /F "usebackq delims=" %%P in (`git -C "%AC_LIBRARY_PATH%" rev-parse HEAD 2^>nul`) do if not defined AC_LIBRARY_LOCAL set "AC_LIBRARY_LOCAL=%%P"
 if not defined AC_LIBRARY_LOCAL (
-    call :print_missing "ac-library update"
+    set "AC_LIBRARY_NEEDS_UPDATE=1"
     exit /b 0
 )
 call :search_command "ac-library" "git -C ""%AC_LIBRARY_PATH%"" ls-remote origin HEAD" "AC_LIBRARY_REMOTE"
 if errorlevel 1 (
-    call :print_missing "ac-library remote check"
+    set "AC_LIBRARY_NEEDS_UPDATE=1"
     exit /b 0
 )
 for /F "tokens=1" %%P in ("%AC_LIBRARY_REMOTE%") do set "AC_LIBRARY_REMOTE=%%P"
-if /i "%AC_LIBRARY_LOCAL%"=="%AC_LIBRARY_REMOTE%" exit /b 0
-call :print_missing "ac-library update"
+if /i not "%AC_LIBRARY_LOCAL%"=="%AC_LIBRARY_REMOTE%" set "AC_LIBRARY_NEEDS_UPDATE=1"
 exit /b 0
 
 :update_ac_library
@@ -486,7 +502,7 @@ if errorlevel 1 (
         if "%VERBOSE%"=="1" echo   %MSYS2_SHELL%
     )
 )
-set "PACMAN_COMMAND=pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python"
+set "PACMAN_COMMAND=pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python mingw-w64-x86_64-ruff"
 call :run_pacman_spinner "INSTALLING" "INSTALLED"
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] pacman toolchain install failed.
@@ -610,6 +626,16 @@ exit /b 0
 :record_component
 if "%~1"=="" exit /b 0
 reg add "%STATE_KEY%" /v "%~1" /t REG_DWORD /d 1 /f >nul
+exit /b %ERRORLEVEL%
+
+:ensure_ruff
+call :search_command "Ruff" "where.exe ruff" "FOUND_RUFF_PATH"
+if not errorlevel 1 exit /b 0
+if "%CHECK_ONLY%"=="1" (
+    call :print_missing "Ruff"
+    exit /b 0
+)
+call :install_msys2_toolchain
 exit /b %ERRORLEVEL%
 
 :refresh_path
