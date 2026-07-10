@@ -18,6 +18,12 @@ Verify without changing environment variables:
 scripts\install.bat --check
 ```
 
+Show resolved executable paths and package-manager output during installation:
+
+```bat
+scripts\install.bat --verbose
+```
+
 If `--check` reports missing components, run the installer without `--check` to install them.
 For `ac-library`, `--check` only reports whether the submodule needs an update; normal install updates it.
 
@@ -45,7 +51,7 @@ scripts\install.bat
 - usable Python 3, preferring MSYS2 Python and ignoring the Microsoft Store `WindowsApps` alias
 - `ac-library` submodule state
 
-If a tool is missing during a normal install, it tries to install it with `winget`. Existing Git is kept silent during normal installs; if Git is missing, the installer shows it like the other install steps. For C++ and Python, it installs MSYS2 externally and installs only the CP toolchain with `pacman`: GCC, GDB, clang tools, and Python.
+If a tool is missing during a normal install, it tries to install it with `winget`. For C++ and Python, it installs MSYS2 externally and installs only the CP toolchain with `pacman`: GCC, GDB, clang tools, and Python. `--verbose` also shows the resolved executable paths after installation.
 
 The installer also:
 
@@ -53,9 +59,11 @@ The installer also:
 - sets `XDG_CONFIG_HOME` to the repository root
 - sets `CP_SETUP_ROOT` to the repository root
 - sets `CP_PYTHON` to the real Python executable used by the setup
-- configures CMD DOSKEY macros from `scripts\cp_macros`
+- adds its CMD DOSKEY macro command to `AutoRun` without replacing existing AutoRun commands
 - initializes and updates the `ac-library` submodule
 - verifies C++, Java, Python, and expansion for all three languages
+
+The installer records external installs under the current user registry key for diagnostics. Uninstallation also detects currently available components, so it works for setups installed before this tracking was added.
 
 External tools are not stored in this repository.
 
@@ -133,13 +141,13 @@ On failure it prints an `EXPAND FAILED` message.
 
 ## Uninstall
 
-`scripts\uninstall.bat` removes only entries managed by this setup:
+`scripts\uninstall.bat` automatically removes entries managed by this setup:
 
 - known User `Path` entries added by the installer
 - `XDG_CONFIG_HOME`, `CP_SETUP_ROOT`, `CP_PYTHON`, and `CP_GPP` when they point to this setup or the known MSYS2 install paths
-- CMD AutoRun for `scripts\cp_macros`
+- its CMD AutoRun command for `scripts\cp_macros`, while preserving other commands
 
-It does not uninstall external tools such as Neovim, JDK, MSYS2, or Git.
+It then asks `Y/N` before removing available Git, Neovim, JDK, or MSYS2 components. If MSYS2 is kept, it separately asks whether to remove the CP packages installed through `pacman`. Finally, it asks whether to remove the repository folder itself.
 
 Preview without changing anything:
 

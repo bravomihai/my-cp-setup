@@ -8,6 +8,7 @@ set "ORIGINAL_ARGS=%*"
 set "CHECK_ONLY=0"
 set "VERBOSE=0"
 set "MISSING_COUNT=0"
+set "STATE_KEY=HKCU\Software\my-cp-setup"
 set "WINGET_ARGS=--exact --source winget --accept-package-agreements --accept-source-agreements --disable-interactivity"
 set "WINGET_QUIET_ARGS=%WINGET_ARGS% --silent"
 
@@ -27,8 +28,6 @@ echo [%ESC%[31mFAILED%ESC%[0m] Unknown argument: %~1
 exit /b 1
 
 :parsed_args
-
-if "%CHECK_ONLY%"=="0" set "VERBOSE=0"
 
 if "%CHECK_ONLY%"=="0" (
     call :ensure_admin
@@ -57,14 +56,14 @@ if "%CHECK_ONLY%"=="1" (
 
 call :need_git
 if errorlevel 1 goto failed
-call :need_or_install nvim Neovim.Neovim "Neovim"
+call :need_or_install nvim Neovim.Neovim "Neovim" "Winget.Neovim"
 if errorlevel 1 goto failed
-call :need_or_install javac EclipseAdoptium.Temurin.21.JDK "JDK"
+call :need_or_install javac EclipseAdoptium.Temurin.21.JDK "JDK" "Winget.JDK"
 if errorlevel 1 goto failed
 
-where g++ >nul 2>nul
+call :search_command "g++" "where.exe g++" "FOUND_GPP_PATH"
 if not errorlevel 1 (
-    call :print_found_where "g++" "g++"
+    call :find_gpp
 ) else (
     if "%CHECK_ONLY%"=="1" (
         call :print_missing "g++"
@@ -141,7 +140,7 @@ if "%CHECK_ONLY%"=="0" (
     if errorlevel 1 goto failed
 )
 
-echo Verifying setup...
+echo [%ESC%[38;5;183mVERIFYING%ESC%[0m] Setup
 call :verify
 if errorlevel 1 goto failed
 
@@ -230,11 +229,8 @@ if not "%ELEVATE_EXIT%"=="0" (
 exit /b 2
 
 :need_git
-where git >nul 2>nul
-if not errorlevel 1 (
-    if "%CHECK_ONLY%"=="1" call :print_found_where "Git" "git"
-    exit /b 0
-)
+call :search_command "Git" "where.exe git" "FOUND_GIT_PATH"
+if not errorlevel 1 exit /b 0
 
 if "%CHECK_ONLY%"=="1" (
     call :print_missing "Git"
@@ -255,8 +251,11 @@ set "INSTALL_EXIT=%ERRORLEVEL%"
 call :install_paths
 if errorlevel 1 exit /b 1
 call :refresh_path
-where git >nul 2>nul
-if not errorlevel 1 exit /b 0
+call :search_command "Git" "where.exe git" "FOUND_GIT_PATH"
+if not errorlevel 1 (
+    if "%INSTALL_EXIT%"=="0" call :record_component "Winget.Git"
+    exit /b 0
+)
 if not "%INSTALL_EXIT%"=="0" (
     echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for Git.
     if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
@@ -267,11 +266,8 @@ if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
 exit /b 1
 
 :need_or_install
-where "%~1" >nul 2>nul
-if not errorlevel 1 (
-    call :print_found_where "%~3" "%~1"
-    exit /b 0
-)
+call :search_command "%~3" "where.exe %~1" "FOUND_TOOL_PATH"
+if not errorlevel 1 exit /b 0
 
 if "%CHECK_ONLY%"=="1" (
     call :print_missing "%~3"
@@ -292,8 +288,9 @@ set "INSTALL_EXIT=%ERRORLEVEL%"
 call :install_paths
 if errorlevel 1 exit /b 1
 call :refresh_path
-where "%~1" >nul 2>nul
+call :search_command "%~3" "where.exe %~1" "FOUND_TOOL_PATH"
 if not errorlevel 1 (
+    if "%INSTALL_EXIT%"=="0" call :record_component "%~4"
     exit /b 0
 )
 if not "%INSTALL_EXIT%"=="0" (
@@ -310,7 +307,7 @@ echo [%ESC%[38;5;114mFOUND%ESC%[0m] %~1
 exit /b 0
 
 :print_found_path
-if "%CHECK_ONLY%"=="1" if "%VERBOSE%"=="1" (
+if "%VERBOSE%"=="1" (
     echo [%ESC%[38;5;114mFOUND%ESC%[0m] %~1: %~2
 ) else (
     call :print_found "%~1"
@@ -319,7 +316,7 @@ exit /b 0
 
 :print_found_where
 set "FOUND_PATH="
-if "%CHECK_ONLY%"=="1" if "%VERBOSE%"=="1" (
+if "%VERBOSE%"=="1" (
     for /F "usebackq delims=" %%P in (`where "%~2" 2^>nul`) do (
         if not defined FOUND_PATH set "FOUND_PATH=%%P"
     )
@@ -338,16 +335,63 @@ set /A MISSING_COUNT+=1
 echo [%ESC%[33mMISSING%ESC%[0m] %~1
 exit /b 0
 
+:search_command
+setlocal EnableExtensions EnableDelayedExpansion
+set "SEARCH_LABEL=%~1"
+set "SEARCH_COMMAND=%~2"
+set "SEARCH_RESULT_FILE=%TEMP%\cp_setup_search_%RANDOM%_%RANDOM%.txt"
+set "SEARCH_PS=%TEMP%\cp_setup_search_%RANDOM%_%RANDOM%.ps1"
+> "%SEARCH_PS%" echo $label = $env:SEARCH_LABEL
+>> "%SEARCH_PS%" echo $command = $env:SEARCH_COMMAND
+>> "%SEARCH_PS%" echo $output = $env:SEARCH_RESULT_FILE
+>> "%SEARCH_PS%" echo $esc = [char]27
+>> "%SEARCH_PS%" echo $cr = [char]13
+>> "%SEARCH_PS%" echo $clear = $esc + '[2K'
+>> "%SEARCH_PS%" echo $searching = '[' + $esc + '[38;5;183mSEARCHING' + $esc + '[0m]'
+>> "%SEARCH_PS%" echo $found = '[' + $esc + '[38;5;114mFOUND' + $esc + '[0m]'
+>> "%SEARCH_PS%" echo $frames = @([char]92,'-','/','^|')
+>> "%SEARCH_PS%" echo $job = Start-Job -ScriptBlock { param($command) $items = @(^& $env:ComSpec /d /c $command 2^>$null); [pscustomobject]@{ ExitCode = $LASTEXITCODE; Items = $items } } -ArgumentList $command
+>> "%SEARCH_PS%" echo $i = 0
+>> "%SEARCH_PS%" echo do { Write-Host -NoNewline ($cr + $clear + $searching + ' ' + $frames[$i %% $frames.Count] + ' ' + $label); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ } while ($job.State -eq 'Running')
+>> "%SEARCH_PS%" echo $result = Receive-Job -Wait $job
+>> "%SEARCH_PS%" echo Remove-Job $job -Force
+>> "%SEARCH_PS%" echo $items = @($result.Items)
+>> "%SEARCH_PS%" echo if ($items.Count) { [IO.File]::WriteAllLines($output,[string[]]$items) } else { [IO.File]::WriteAllText($output,'') }
+>> "%SEARCH_PS%" echo $exitCode = [int]$result.ExitCode
+>> "%SEARCH_PS%" echo if ($exitCode -eq 0) { $suffix = ''; if ($env:VERBOSE -eq '1' -and $items.Count) { $suffix = ': ' + $items[0] }; Write-Host ($cr + $clear + $found + ' ' + $label + $suffix) } else { Write-Host -NoNewline ($cr + $clear) }
+>> "%SEARCH_PS%" echo exit $exitCode
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SEARCH_PS%"
+set "SEARCH_EXIT=%ERRORLEVEL%"
+set "SEARCH_VALUE="
+for /F "usebackq delims=" %%P in ("%SEARCH_RESULT_FILE%") do if not defined SEARCH_VALUE set "SEARCH_VALUE=%%P"
+del "%SEARCH_PS%" >nul 2>nul
+del "%SEARCH_RESULT_FILE%" >nul 2>nul
+endlocal & set "%~3=%SEARCH_VALUE%" & exit /b %SEARCH_EXIT%
+
 :check_ac_library
 where git >nul 2>nul
 if errorlevel 1 exit /b 0
 if not exist "%ROOT%\.gitmodules" exit /b 0
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $verbose='%VERBOSE%' -eq '1'; $path=Join-Path $root 'libraries\ac-library'; $esc=[char]27; $found='['+$esc+'[38;5;114mFOUND'+$esc+'[0m]'; $missing='['+$esc+'[33mMISSING'+$esc+'[0m]'; if (-not (Test-Path -LiteralPath (Join-Path $path '.git'))) { Write-Host ($missing+' ac-library update'); exit 2 }; $local=(& git -C $path rev-parse HEAD 2>$null); if ($LASTEXITCODE -ne 0 -or -not $local) { Write-Host ($missing+' ac-library update'); exit 2 }; $remote=(& git -C $path ls-remote origin HEAD 2>$null); if ($LASTEXITCODE -ne 0 -or -not $remote) { Write-Host ($missing+' ac-library remote check'); exit 2 }; $remoteHead=($remote -split '\s+')[0]; if ($local.Trim() -ieq $remoteHead.Trim()) { if ($verbose) { Write-Host ($found+' ac-library: '+$path) } else { Write-Host ($found+' ac-library') } } else { Write-Host ($missing+' ac-library update') ; exit 2 }"
-if errorlevel 2 (
-    set /A MISSING_COUNT+=1
+set "AC_LIBRARY_PATH=%ROOT%\libraries\ac-library"
+if not exist "%AC_LIBRARY_PATH%\.git" (
+    call :print_missing "ac-library update"
     exit /b 0
 )
-exit /b %ERRORLEVEL%
+set "AC_LIBRARY_LOCAL="
+for /F "usebackq delims=" %%P in (`git -C "%AC_LIBRARY_PATH%" rev-parse HEAD 2^>nul`) do if not defined AC_LIBRARY_LOCAL set "AC_LIBRARY_LOCAL=%%P"
+if not defined AC_LIBRARY_LOCAL (
+    call :print_missing "ac-library update"
+    exit /b 0
+)
+call :search_command "ac-library" "git -C ""%AC_LIBRARY_PATH%"" ls-remote origin HEAD" "AC_LIBRARY_REMOTE"
+if errorlevel 1 (
+    call :print_missing "ac-library remote check"
+    exit /b 0
+)
+for /F "tokens=1" %%P in ("%AC_LIBRARY_REMOTE%") do set "AC_LIBRARY_REMOTE=%%P"
+if /i "%AC_LIBRARY_LOCAL%"=="%AC_LIBRARY_REMOTE%" exit /b 0
+call :print_missing "ac-library update"
+exit /b 0
 
 :update_ac_library
 where git >nul 2>nul
@@ -368,7 +412,7 @@ if errorlevel 1 (
 exit /b 0
 
 :check_env_paths
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $esc=[char]27; $cr=[char]13; $clear=$esc+'[2K'; $check='['+$esc+'[38;5;183mCHECK'+$esc+'[0m]'; $found='['+$esc+'[38;5;114mFOUND'+$esc+'[0m]'; $failed='['+$esc+'[31mFAILED'+$esc+'[0m]'; $job=Start-Job -ScriptBlock { param($root) $c=@((Join-Path $root 'scripts'),'C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin'); $e=$c | Where-Object { Test-Path -LiteralPath $_ }; if (@($e).Count -gt 0) { 0 } else { 1 } } -ArgumentList $root; $frames=@([char]92,'-','/','|'); $i=0; while ($job.State -eq 'Running') { Write-Host -NoNewline ($cr+$clear+$check+' '+$frames[$i %% $frames.Count]+' Environment paths'); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }; $items=@(Receive-Job -Wait $job); Remove-Job $job -Force; if ($items.Count -eq 0) { $exitCode=1 } else { $exitCode=[int]$items[-1] }; if ($exitCode -eq 0) { Write-Host ($cr+$clear+$found+' Environment paths') } else { Write-Host ($cr+$clear+$failed+' Environment paths') }; exit $exitCode"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $esc=[char]27; $cr=[char]13; $clear=$esc+'[2K'; $check='['+$esc+'[38;5;183mCHECKING'+$esc+'[0m]'; $found='['+$esc+'[38;5;114mFOUND'+$esc+'[0m]'; $failed='['+$esc+'[31mFAILED'+$esc+'[0m]'; $job=Start-Job -ScriptBlock { param($root) $c=@((Join-Path $root 'scripts'),'C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin'); $e=$c | Where-Object { Test-Path -LiteralPath $_ }; if (@($e).Count -gt 0) { 0 } else { 1 } } -ArgumentList $root; $frames=@([char]92,'-','/','|'); $i=0; while ($job.State -eq 'Running') { Write-Host -NoNewline ($cr+$clear+$check+' '+$frames[$i %% $frames.Count]+' Environment paths'); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }; $items=@(Receive-Job -Wait $job); Remove-Job $job -Force; if ($items.Count -eq 0) { $exitCode=1 } else { $exitCode=[int]$items[-1] }; if ($exitCode -eq 0) { Write-Host ($cr+$clear+$found+' Environment paths') } else { Write-Host ($cr+$clear+$failed+' Environment paths') }; exit $exitCode"
 exit /b %ERRORLEVEL%
 
 :require_winget
@@ -416,21 +460,29 @@ if errorlevel 1 (
         if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
         exit /b 1
     )
+    if "%INSTALL_EXIT%"=="0" call :record_component "Winget.MSYS2"
+    if "%VERBOSE%"=="1" call :print_found_path "MSYS2" "%MSYS2_SHELL%"
 )
 if "%VERBOSE%"=="1" (
     echo [%ESC%[38;5;153mINSTALLING%ESC%[0m] MSYS2 toolchain via pacman
     powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; $bash=Join-Path (Split-Path -Parent $shell) 'usr\bin\bash.exe'; if (-not (Test-Path -LiteralPath $bash)) { throw 'Could not find MSYS2 bash.exe after installing MSYS2.' }; $env:MSYSTEM='MINGW64'; $env:CHERE_INVOKING='enabled_from_arguments'; & $bash -lc 'pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }"
 ) else (
-    call :run_pacman_spinner
+    set "PACMAN_COMMAND=pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python"
+    call :run_pacman_spinner "INSTALLING" "INSTALLED"
 )
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] pacman toolchain install failed.
     if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_pacman.log
     exit /b 1
 )
+call :record_component "Pacman.Toolchain"
 exit /b %ERRORLEVEL%
 
 :run_pacman_spinner
+set "PACMAN_ACTION=%~1"
+set "PACMAN_SUCCESS=%~2"
+if not defined PACMAN_ACTION set "PACMAN_ACTION=INSTALLING"
+if not defined PACMAN_SUCCESS set "PACMAN_SUCCESS=INSTALLED"
 set "SPIN_PS=%TEMP%\cp_setup_pacman_spinner_%RANDOM%_%RANDOM%.ps1"
 > "%SPIN_PS%" echo $ErrorActionPreference = 'Stop'
 >> "%SPIN_PS%" echo $label = 'MSYS2 toolchain via pacman'
@@ -441,29 +493,29 @@ set "SPIN_PS=%TEMP%\cp_setup_pacman_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $esc = [char]27
 >> "%SPIN_PS%" echo $cr = [char]13
 >> "%SPIN_PS%" echo $clear = $esc + '[2K'
->> "%SPIN_PS%" echo $install = '[' + $esc + '[38;5;153mINSTALLING' + $esc + '[0m]'
->> "%SPIN_PS%" echo $installed = '[' + $esc + '[38;5;114mINSTALLED' + $esc + '[0m]'
+>> "%SPIN_PS%" echo $action = '[' + $esc + '[38;5;153m' + $env:PACMAN_ACTION + $esc + '[0m]'
+>> "%SPIN_PS%" echo $success = '[' + $esc + '[38;5;114m' + $env:PACMAN_SUCCESS + $esc + '[0m]'
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $log,$wrapper -ErrorAction SilentlyContinue
 >> "%SPIN_PS%" echo $shell = $null
 >> "%SPIN_PS%" echo foreach ($path in @('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd')) { if (Test-Path -LiteralPath $path) { $shell = $path; break } }
 >> "%SPIN_PS%" echo if (-not $shell) { $cmd = Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell = $cmd.Source } }
->> "%SPIN_PS%" echo if (-not $shell) { 'Could not find msys2_shell.cmd after installing MSYS2.' ^| Set-Content -LiteralPath $log; Write-Host ($install + ' ' + $label); exit 1 }
+>> "%SPIN_PS%" echo if (-not $shell) { 'Could not find msys2_shell.cmd after installing MSYS2.' ^| Set-Content -LiteralPath $log; Write-Host ($action + ' ' + $label); exit 1 }
 >> "%SPIN_PS%" echo $bash = Join-Path (Split-Path -Parent $shell) 'usr\bin\bash.exe'
->> "%SPIN_PS%" echo if (-not (Test-Path -LiteralPath $bash)) { 'Could not find MSYS2 bash.exe after installing MSYS2.' ^| Set-Content -LiteralPath $log; Write-Host ($install + ' ' + $label); exit 1 }
->> "%SPIN_PS%" echo $pacman = 'pacman -Syu --noconfirm ^&^& pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'
+>> "%SPIN_PS%" echo if (-not (Test-Path -LiteralPath $bash)) { 'Could not find MSYS2 bash.exe after installing MSYS2.' ^| Set-Content -LiteralPath $log; Write-Host ($action + ' ' + $label); exit 1 }
+>> "%SPIN_PS%" echo $pacman = $env:PACMAN_COMMAND
 >> "%SPIN_PS%" echo $runLine = [string]('call ' + $q + $bash + $q + ' -lc ' + $q + $pacman + $q + ' 1^>' + $q + $log + $q + ' 2^>^&1')
 >> "%SPIN_PS%" echo $lines = @('@echo off','set "MSYSTEM=MINGW64"','set "CHERE_INVOKING=enabled_from_arguments"',$runLine,'exit /b %%ERRORLEVEL%%')
 >> "%SPIN_PS%" echo [IO.File]::WriteAllLines($wrapper, $lines)
 >> "%SPIN_PS%" echo $job = Start-Job -ScriptBlock { param($wrapper) ^& $env:ComSpec /d /c call $wrapper; $LASTEXITCODE } -ArgumentList $wrapper
 >> "%SPIN_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%SPIN_PS%" echo $i = 0
->> "%SPIN_PS%" echo while ($job.State -eq 'Running') { Write-Host -NoNewline ($cr + $clear + $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label + ' (' + $hint + ')'); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
+>> "%SPIN_PS%" echo while ($job.State -eq 'Running') { Write-Host -NoNewline ($cr + $clear + $action + ' ' + $frames[$i %% $frames.Count] + ' ' + $label + ' (' + $hint + ')'); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
 >> "%SPIN_PS%" echo $jobResult = Receive-Job -Wait $job
 >> "%SPIN_PS%" echo Remove-Job $job -Force
 >> "%SPIN_PS%" echo $jobItems = @($jobResult)
 >> "%SPIN_PS%" echo if ($jobItems.Count -eq 0) { $exitCode = 1 } else { $exitCode = [int]$jobItems[-1] }
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue
->> "%SPIN_PS%" echo if ($exitCode -eq 0) { Write-Host ($cr + $clear + $installed + ' ' + $label) } else { Write-Host ($cr + $clear + '[' + $esc + '[31mFAILED' + $esc + '[0m] ' + $label) }
+>> "%SPIN_PS%" echo if ($exitCode -eq 0) { Write-Host ($cr + $clear + $success + ' ' + $label) } else { Write-Host ($cr + $clear + '[' + $esc + '[31mFAILED' + $esc + '[0m] ' + $label) }
 >> "%SPIN_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SPIN_PS%"
 set "SPIN_EXIT=%ERRORLEVEL%"
@@ -474,6 +526,10 @@ exit /b %SPIN_EXIT%
 set "SPIN_LABEL=%~1"
 set "SPIN_HINT=%~2"
 set "SPIN_LOG=%~3"
+set "SPIN_ACTION=%~4"
+set "SPIN_SUCCESS=%~5"
+if not defined SPIN_ACTION set "SPIN_ACTION=INSTALLING"
+if not defined SPIN_SUCCESS set "SPIN_SUCCESS=INSTALLED"
 set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
 > "%SPIN_PS%" echo $ErrorActionPreference = 'Stop'
 >> "%SPIN_PS%" echo $label = $env:SPIN_LABEL
@@ -485,8 +541,8 @@ set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $esc = [char]27
 >> "%SPIN_PS%" echo $cr = [char]13
 >> "%SPIN_PS%" echo $clear = $esc + '[2K'
->> "%SPIN_PS%" echo $install = '[' + $esc + '[38;5;153mINSTALLING' + $esc + '[0m]'
->> "%SPIN_PS%" echo $installed = '[' + $esc + '[38;5;114mINSTALLED' + $esc + '[0m]'
+>> "%SPIN_PS%" echo $action = '[' + $esc + '[38;5;153m' + $env:SPIN_ACTION + $esc + '[0m]'
+>> "%SPIN_PS%" echo $success = '[' + $esc + '[38;5;114m' + $env:SPIN_SUCCESS + $esc + '[0m]'
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $log,$wrapper -ErrorAction SilentlyContinue
 >> "%SPIN_PS%" echo $runLine = [string]('call ' + $cmd + ' 1^>' + $q + $log + $q + ' 2^>^&1')
 >> "%SPIN_PS%" echo $lines = @('@echo off',$runLine,'exit /b %%ERRORLEVEL%%')
@@ -494,13 +550,13 @@ set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $job = Start-Job -ScriptBlock { param($wrapper) ^& $env:ComSpec /d /c call $wrapper; $LASTEXITCODE } -ArgumentList $wrapper
 >> "%SPIN_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%SPIN_PS%" echo $i = 0
->> "%SPIN_PS%" echo while ($job.State -eq 'Running') { $text = $install + ' ' + $frames[$i %% $frames.Count] + ' ' + $label; if ($hint) { $text += ' (' + $hint + ')' }; Write-Host -NoNewline ($cr + $clear + $text); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
+>> "%SPIN_PS%" echo while ($job.State -eq 'Running') { $text = $action + ' ' + $frames[$i %% $frames.Count] + ' ' + $label; if ($hint) { $text += ' (' + $hint + ')' }; Write-Host -NoNewline ($cr + $clear + $text); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
 >> "%SPIN_PS%" echo $jobResult = Receive-Job -Wait $job
 >> "%SPIN_PS%" echo Remove-Job $job -Force
 >> "%SPIN_PS%" echo $jobItems = @($jobResult)
 >> "%SPIN_PS%" echo if ($jobItems.Count -eq 0) { $exitCode = 1 } else { $exitCode = [int]$jobItems[-1] }
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue
->> "%SPIN_PS%" echo if ($exitCode -eq 0) { Write-Host ($cr + $clear + $installed + ' ' + $label) } else { Write-Host ($cr + $clear + '[' + $esc + '[31mFAILED' + $esc + '[0m] ' + $label) }
+>> "%SPIN_PS%" echo if ($exitCode -eq 0) { Write-Host ($cr + $clear + $success + ' ' + $label) } else { Write-Host ($cr + $clear + '[' + $esc + '[31mFAILED' + $esc + '[0m] ' + $label) }
 >> "%SPIN_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SPIN_PS%"
 set "SPIN_EXIT=%ERRORLEVEL%"
@@ -508,7 +564,7 @@ del "%SPIN_PS%" >nul 2>nul
 exit /b %SPIN_EXIT%
 
 :install_paths
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $check='%~1' -ieq 'check'; $verbose='%VERBOSE%' -eq '1'; $esc=[char]27; $found='['+$esc+'[38;5;114mFOUND'+$esc+'[0m]'; $jdkBins=@(); if (Test-Path -LiteralPath 'C:\Program Files\Eclipse Adoptium') { $jdkBins=Get-ChildItem -LiteralPath 'C:\Program Files\Eclipse Adoptium' -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'bin' } }; $c=@((Join-Path $root 'scripts'),'C:\Program Files\Git\cmd','C:\Program Files\Git\usr\bin','C:\Program Files\Git\mingw64\libexec\git-core','D:\software\programming\git\Git\cmd','D:\software\programming\git\Git\usr\bin','D:\software\programming\git\Git\mingw64\libexec\git-core','C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin') + $jdkBins; $e=$c | Where-Object { Test-Path -LiteralPath $_ }; if ($check) { if ($verbose) { Write-Host ($found+' Environment paths:'); foreach ($p in $e) { Write-Host ('  '+$p) } } else { Write-Host \"[$($esc)[38;5;183mCHECK$($esc)[0m] Environment paths\" }; exit 0 }; $u=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $u) { $u='' }; $known=@($env:LOCALAPPDATA + '\Microsoft\WindowsApps') + $c; $known=$known | Where-Object { $_ } | Sort-Object Length -Descending -Unique; $parts=New-Object System.Collections.Generic.List[string]; foreach ($raw in ($u -split ';')) { $s=$raw.Trim(); while ($s) { $hit=$null; $hitAt=-1; foreach ($k in $known) { $i=$s.IndexOf($k, [StringComparison]::OrdinalIgnoreCase); if ($i -ge 0 -and ($hitAt -lt 0 -or $i -lt $hitAt -or ($i -eq $hitAt -and $k.Length -gt $hit.Length))) { $hit=$k; $hitAt=$i } }; if (-not $hit) { $parts.Add($s); break }; if ($hitAt -gt 0) { $prefix=$s.Substring(0,$hitAt).Trim(); if ($prefix) { $parts.Add($prefix) } }; $parts.Add($hit); $s=$s.Substring($hitAt + $hit.Length).Trim() } }; foreach ($p in $e) { $parts.Add($p) }; $clean=New-Object System.Collections.Generic.List[string]; foreach ($p in $parts) { $v=$p.Trim().TrimEnd('\'); if (-not $v) { continue }; $exists=$false; foreach ($x in $clean) { if ($x.TrimEnd('\') -ieq $v) { $exists=$true; break } }; if (-not $exists) { $clean.Add($v) } }; [Environment]::SetEnvironmentVariable('Path',($clean -join ';'),'User')"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $check='%~1' -ieq 'check'; $verbose='%VERBOSE%' -eq '1'; $esc=[char]27; $found='['+$esc+'[38;5;114mFOUND'+$esc+'[0m]'; $jdkBins=@(); if (Test-Path -LiteralPath 'C:\Program Files\Eclipse Adoptium') { $jdkBins=Get-ChildItem -LiteralPath 'C:\Program Files\Eclipse Adoptium' -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'bin' } }; $c=@((Join-Path $root 'scripts'),'C:\Program Files\Git\cmd','C:\Program Files\Git\usr\bin','C:\Program Files\Git\mingw64\libexec\git-core','D:\software\programming\git\Git\cmd','D:\software\programming\git\Git\usr\bin','D:\software\programming\git\Git\mingw64\libexec\git-core','C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin') + $jdkBins; $e=$c | Where-Object { Test-Path -LiteralPath $_ }; if ($check) { if ($verbose) { Write-Host ($found+' Environment paths:'); foreach ($p in $e) { Write-Host ('  '+$p) } } else { Write-Host \"[$($esc)[38;5;183mCHECKING$($esc)[0m] Environment paths\" }; exit 0 }; $u=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $u) { $u='' }; $known=@($env:LOCALAPPDATA + '\Microsoft\WindowsApps') + $c; $known=$known | Where-Object { $_ } | Sort-Object Length -Descending -Unique; $parts=New-Object System.Collections.Generic.List[string]; foreach ($raw in ($u -split ';')) { $s=$raw.Trim(); while ($s) { $hit=$null; $hitAt=-1; foreach ($k in $known) { $i=$s.IndexOf($k, [StringComparison]::OrdinalIgnoreCase); if ($i -ge 0 -and ($hitAt -lt 0 -or $i -lt $hitAt -or ($i -eq $hitAt -and $k.Length -gt $hit.Length))) { $hit=$k; $hitAt=$i } }; if (-not $hit) { $parts.Add($s); break }; if ($hitAt -gt 0) { $prefix=$s.Substring(0,$hitAt).Trim(); if ($prefix) { $parts.Add($prefix) } }; $parts.Add($hit); $s=$s.Substring($hitAt + $hit.Length).Trim() } }; foreach ($p in $e) { $parts.Add($p) }; $clean=New-Object System.Collections.Generic.List[string]; foreach ($p in $parts) { $v=$p.Trim().TrimEnd('\'); if (-not $v) { continue }; $exists=$false; foreach ($x in $clean) { if ($x.TrimEnd('\') -ieq $v) { $exists=$true; break } }; if (-not $exists) { $clean.Add($v) } }; [Environment]::SetEnvironmentVariable('Path',($clean -join ';'),'User')"
 exit /b %ERRORLEVEL%
 
 :install_cmd_macros
@@ -525,13 +581,18 @@ if not defined CP_PYTHON (
 powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::SetEnvironmentVariable('CP_SETUP_ROOT', '%ROOT%', 'User'); [Environment]::SetEnvironmentVariable('CP_PYTHON', '%CP_PYTHON%', 'User')"
 if errorlevel 1 exit /b 1
 set "CP_SETUP_ROOT=%ROOT%"
-reg add "HKCU\Software\Microsoft\Command Processor" /v AutoRun /t REG_SZ /d "doskey /macrofile=\"%MACROS%\"" /f >nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$key='HKCU:\Software\Microsoft\Command Processor'; $command='doskey /macrofile=\"'+$env:MACROS+'\"'; $current=(Get-ItemProperty -Path $key -Name AutoRun -ErrorAction SilentlyContinue).AutoRun; if (-not $current) { Set-ItemProperty -Path $key -Name AutoRun -Value $command } elseif ($current.IndexOf($command,[StringComparison]::OrdinalIgnoreCase) -lt 0) { Set-ItemProperty -Path $key -Name AutoRun -Value ($current.TrimEnd()+' & '+$command) }"
 if errorlevel 1 (
     echo Failed to update cmd AutoRun.
     exit /b 1
 )
 doskey /macrofile="%MACROS%"
 exit /b 0
+
+:record_component
+if "%~1"=="" exit /b 0
+reg add "%STATE_KEY%" /v "%~1" /t REG_DWORD /d 1 /f >nul
+exit /b %ERRORLEVEL%
 
 :refresh_path
 for /F "usebackq tokens=* delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"`) do set "PATH=%%P"
@@ -559,7 +620,7 @@ if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] g++ is not visible during verification.
     exit /b 1
 )
-where nvim >nul 2>nul
+call :search_command "Neovim" "where.exe nvim" "FOUND_NVIM_PATH"
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] nvim is not visible during verification.
     exit /b 1
@@ -569,7 +630,7 @@ if not defined CP_PYTHON (
     echo [%ESC%[31mFAILED%ESC%[0m] Python is not visible during verification.
     exit /b 1
 )
-where javac >nul 2>nul
+call :search_command "JDK" "where.exe javac" "FOUND_JAVAC_PATH"
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] javac is not visible during verification.
     exit /b 1
@@ -657,7 +718,7 @@ for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass
 >> "%SPINNER_PY%" echo     process = subprocess.Popen(command, cwd=args.cwd, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 >> "%SPINNER_PY%" echo     index = 0
 >> "%SPINNER_PY%" echo     while process.poll() is None:
->> "%SPINNER_PY%" echo         print("\r{}[{}VERIFY{}] {} {}".format(CLEAR, PURPLE, RESET, FRAMES[index %% len(FRAMES)], args.label), end="", flush=True)
+>> "%SPINNER_PY%" echo         print("\r{}[{}VERIFYING{}] {} {}".format(CLEAR, PURPLE, RESET, FRAMES[index %% len(FRAMES)], args.label), end="", flush=True)
 >> "%SPINNER_PY%" echo         time.sleep(0.1)
 >> "%SPINNER_PY%" echo         index += 1
 >> "%SPINNER_PY%" echo     stdout, stderr = process.communicate()
