@@ -63,7 +63,7 @@ if errorlevel 1 goto failed
 
 call :search_command "g++" "where.exe g++" "FOUND_GPP_PATH"
 if not errorlevel 1 (
-    call :find_gpp
+    call :find_gpp quiet
 ) else (
     if "%CHECK_ONLY%"=="1" (
         call :print_missing "g++"
@@ -74,7 +74,7 @@ if not errorlevel 1 (
 )
 
 if "%CHECK_ONLY%"=="1" if not "%MISSING_COUNT%"=="0" goto skip_gpp_validation
-call :find_gpp
+call :find_gpp quiet
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] g++ was installed, but g++.exe was not found in known MSYS2 paths.
     goto failed
@@ -82,18 +82,18 @@ if errorlevel 1 (
 :skip_gpp_validation
 
 call :find_python
-if not errorlevel 1 (
-    call :print_found_path "Python" "%CP_PYTHON%"
-) else if "%CHECK_ONLY%"=="1" (
-    call :print_missing "Python 3"
-) else (
-    call :install_msys2_toolchain
-    if errorlevel 1 goto failed
-    call :refresh_path
-    call :find_python
-    if errorlevel 1 (
-        echo [%ESC%[31mFAILED%ESC%[0m] Python was installed, but python.exe was not found in known MSYS2 paths.
-        goto failed
+if errorlevel 1 (
+    if "%CHECK_ONLY%"=="1" (
+        call :print_missing "Python 3"
+    ) else (
+        call :install_msys2_toolchain
+        if errorlevel 1 goto failed
+        call :refresh_path
+        call :find_python quiet
+        if errorlevel 1 (
+            echo [%ESC%[31mFAILED%ESC%[0m] Python was installed, but python.exe was not found in known MSYS2 paths.
+            goto failed
+        )
     )
 )
 
@@ -140,7 +140,7 @@ if "%CHECK_ONLY%"=="0" (
     if errorlevel 1 goto failed
 )
 
-echo [%ESC%[38;5;183mVERIFYING%ESC%[0m] Setup
+echo Verifying setup...
 call :verify
 if errorlevel 1 goto failed
 
@@ -353,7 +353,11 @@ exit /b 0
 :search_command
 setlocal EnableExtensions EnableDelayedExpansion
 set "SEARCH_LABEL=%~1"
-set "SEARCH_COMMAND=%~2"
+if /i "%~2"=="@env" (
+    set "SEARCH_COMMAND=!SEARCH_COMMAND_INPUT!"
+) else (
+    set "SEARCH_COMMAND=%~2"
+)
 set "SEARCH_RESULT_FILE=%TEMP%\cp_setup_search_%RANDOM%_%RANDOM%.txt"
 set "SEARCH_PS=%TEMP%\cp_setup_search_%RANDOM%_%RANDOM%.ps1"
 > "%SEARCH_PS%" echo $label = $env:SEARCH_LABEL
@@ -384,8 +388,7 @@ del "%SEARCH_RESULT_FILE%" >nul 2>nul
 endlocal & set "%~3=%SEARCH_VALUE%" & exit /b %SEARCH_EXIT%
 
 :check_ac_library
-where git >nul 2>nul
-if errorlevel 1 exit /b 0
+if not defined FOUND_GIT_PATH exit /b 0
 if not exist "%ROOT%\.gitmodules" exit /b 0
 set "AC_LIBRARY_PATH=%ROOT%\libraries\ac-library"
 if not exist "%AC_LIBRARY_PATH%\.git" (
@@ -409,17 +412,13 @@ call :print_missing "ac-library update"
 exit /b 0
 
 :update_ac_library
-where git >nul 2>nul
-if errorlevel 1 exit /b 0
+if not defined FOUND_GIT_PATH exit /b 0
 if not exist "%ROOT%\.gitmodules" exit /b 0
-if "%VERBOSE%"=="1" (
-    echo [%ESC%[38;5;153mINSTALLING%ESC%[0m] ac-library submodule
-    git -C "%ROOT%" submodule update --init --remote libraries/ac-library
-) else (
-    set "INSTALL_CMD=git -C "%ROOT%" submodule update --init --remote libraries/ac-library"
-    call :run_install_spinner "ac-library submodule" "" "%TEMP%\cp_setup_git.log"
-)
-if errorlevel 1 (
+set "INSTALL_CMD=git -C "%ROOT%" submodule update --init --remote libraries/ac-library"
+call :run_install_spinner "ac-library submodule" "" "%TEMP%\cp_setup_git.log"
+set "AC_LIBRARY_EXIT=!ERRORLEVEL!"
+if "%VERBOSE%"=="1" if exist "%TEMP%\cp_setup_git.log" type "%TEMP%\cp_setup_git.log"
+if not "!AC_LIBRARY_EXIT!"=="0" (
     echo [%ESC%[31mFAILED%ESC%[0m] ac-library submodule update failed.
     if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_git.log
     exit /b 1
@@ -446,13 +445,32 @@ echo Store shortcut: start ms-windows-store://pdp/?ProductId=9NBLGGH4NNS1
 exit /b 1
 
 :find_msys2_shell
+if /i "%~1"=="quiet" goto locate_msys2_shell
+if defined MSYS2_SHELL exit /b 0
+set "MSYS2_FINDER=%TEMP%\cp_setup_find_msys2_%RANDOM%_%RANDOM%.cmd"
+> "%MSYS2_FINDER%" echo @echo off
+>> "%MSYS2_FINDER%" echo if exist "C:\msys64\msys2_shell.cmd" ^(
+>> "%MSYS2_FINDER%" echo     echo C:\msys64\msys2_shell.cmd
+>> "%MSYS2_FINDER%" echo     exit /b 0
+>> "%MSYS2_FINDER%" echo ^)
+>> "%MSYS2_FINDER%" echo if exist "D:\software\programming\msys2\msys2_shell.cmd" ^(
+>> "%MSYS2_FINDER%" echo     echo D:\software\programming\msys2\msys2_shell.cmd
+>> "%MSYS2_FINDER%" echo     exit /b 0
+>> "%MSYS2_FINDER%" echo ^)
+>> "%MSYS2_FINDER%" echo where.exe msys2_shell.cmd
+>> "%MSYS2_FINDER%" echo exit /b %%ERRORLEVEL%%
+set "SEARCH_COMMAND_INPUT=call ""%MSYS2_FINDER%"""
+call :search_command "MSYS2" "@env" "MSYS2_SHELL"
+set "MSYS2_EXIT=!ERRORLEVEL!"
+del "%MSYS2_FINDER%" >nul 2>nul
+exit /b !MSYS2_EXIT!
+
+:locate_msys2_shell
 set "MSYS2_SHELL="
 if exist "C:\msys64\msys2_shell.cmd" set "MSYS2_SHELL=C:\msys64\msys2_shell.cmd"
 if not defined MSYS2_SHELL if exist "D:\software\programming\msys2\msys2_shell.cmd" set "MSYS2_SHELL=D:\software\programming\msys2\msys2_shell.cmd"
 if defined MSYS2_SHELL exit /b 0
-for /F "usebackq delims=" %%P in (`where msys2_shell.cmd 2^>nul`) do (
-    if not defined MSYS2_SHELL set "MSYS2_SHELL=%%P"
-)
+for /F "usebackq delims=" %%P in (`where msys2_shell.cmd 2^>nul`) do if not defined MSYS2_SHELL set "MSYS2_SHELL=%%P"
 if defined MSYS2_SHELL exit /b 0
 exit /b 1
 
@@ -469,7 +487,7 @@ if errorlevel 1 (
         call :run_install_spinner "MSYS2 via winget: MSYS2.MSYS2" "" "%TEMP%\cp_setup_winget.log"
     )
     set "INSTALL_EXIT=%ERRORLEVEL%"
-    call :find_msys2_shell
+    call :find_msys2_shell quiet
     if errorlevel 1 (
         echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for MSYS2.
         if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
@@ -617,12 +635,38 @@ for /F "usebackq tokens=* delims=" %%P in (`powershell -NoProfile -ExecutionPoli
 exit /b 0
 
 :find_python
+if /i "%~1"=="quiet" goto locate_python
+set "PYTHON_FINDER=%TEMP%\cp_setup_find_python_%RANDOM%_%RANDOM%.cmd"
+> "%PYTHON_FINDER%" echo @echo off
+>> "%PYTHON_FINDER%" echo powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=@(); if ($env:CP_PYTHON) { $c += $env:CP_PYTHON }; $c += @('C:\msys64\mingw64\bin\python.exe','C:\msys64\ucrt64\bin\python.exe','D:\software\programming\msys2\mingw64\bin\python.exe','D:\software\programming\msys2\ucrt64\bin\python.exe'); $w=where.exe python 2^>$null; if ($LASTEXITCODE -eq 0) { $c += $w }; $py=Get-Command py.exe -ErrorAction SilentlyContinue; if ($py) { $p=& $py.Source -3 -c 'import sys; print(sys.executable)' 2^>$null; if ($LASTEXITCODE -eq 0) { $c += $p } }; foreach ($p in $c) { if ($p -and $p -notlike '*\Microsoft\WindowsApps\*' -and (Test-Path -LiteralPath $p)) { Write-Output $p; exit 0 } }; exit 1"
+>> "%PYTHON_FINDER%" echo exit /b %%ERRORLEVEL%%
+set "SEARCH_COMMAND_INPUT=call ""%PYTHON_FINDER%"""
+call :search_command "Python" "@env" "CP_PYTHON"
+set "FIND_EXIT=!ERRORLEVEL!"
+del "%PYTHON_FINDER%" >nul 2>nul
+exit /b !FIND_EXIT!
+
+:locate_python
 set "CP_PYTHON="
 for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=@(); if ($env:CP_PYTHON) { $c += $env:CP_PYTHON }; $c += @('C:\msys64\mingw64\bin\python.exe','C:\msys64\ucrt64\bin\python.exe','D:\software\programming\msys2\mingw64\bin\python.exe','D:\software\programming\msys2\ucrt64\bin\python.exe'); $w=where.exe python 2>$null; if ($LASTEXITCODE -eq 0) { $c += $w }; $py=Get-Command py.exe -ErrorAction SilentlyContinue; if ($py) { $p=& $py.Source -3 -c 'import sys; print(sys.executable)' 2>$null; if ($LASTEXITCODE -eq 0) { $c += $p } }; foreach ($p in $c) { if ($p -and $p -notlike '*\Microsoft\WindowsApps\*' -and (Test-Path -LiteralPath $p)) { & $p --version *> $null; if ($LASTEXITCODE -eq 0) { Write-Output $p; exit 0 } } }; exit 1"`) do set "CP_PYTHON=%%P"
 if defined CP_PYTHON exit /b 0
 exit /b 1
 
 :find_gpp
+if /i "%~1"=="quiet" goto locate_gpp
+set "GPP_FINDER=%TEMP%\cp_setup_find_gpp_%RANDOM%_%RANDOM%.cmd"
+> "%GPP_FINDER%" echo @echo off
+>> "%GPP_FINDER%" echo powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=@(); if ($env:CP_GPP) { $c += $env:CP_GPP }; $c += @('C:\msys64\mingw64\bin\g++.exe','C:\msys64\ucrt64\bin\g++.exe','D:\software\programming\msys2\mingw64\bin\g++.exe','D:\software\programming\msys2\ucrt64\bin\g++.exe'); $w=where.exe g++ 2^>$null; if ($LASTEXITCODE -eq 0) { $c += $w }; foreach ($p in $c) { if ($p -and (Test-Path -LiteralPath $p)) { Write-Output $p; exit 0 } }; exit 1"
+>> "%GPP_FINDER%" echo exit /b %%ERRORLEVEL%%
+set "SEARCH_COMMAND_INPUT=call ""%GPP_FINDER%"""
+call :search_command "g++" "@env" "CP_GPP"
+set "FIND_EXIT=!ERRORLEVEL!"
+del "%GPP_FINDER%" >nul 2>nul
+if not "!FIND_EXIT!"=="0" exit /b !FIND_EXIT!
+for %%I in ("%CP_GPP%") do set "PATH=%%~dpI;%PATH%"
+exit /b 0
+
+:locate_gpp
 set "CP_GPP="
 for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=@(); if ($env:CP_GPP) { $c += $env:CP_GPP }; $c += @('C:\msys64\mingw64\bin\g++.exe','C:\msys64\ucrt64\bin\g++.exe','D:\software\programming\msys2\mingw64\bin\g++.exe','D:\software\programming\msys2\ucrt64\bin\g++.exe'); $w=where.exe g++ 2>$null; if ($LASTEXITCODE -eq 0) { $c += $w }; foreach ($p in $c) { if ($p -and (Test-Path -LiteralPath $p)) { & $p --version *> $null; if ($LASTEXITCODE -eq 0) { Write-Output $p; exit 0 } } }; exit 1"`) do set "CP_GPP=%%P"
 if defined CP_GPP (
@@ -643,7 +687,7 @@ if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] nvim is not visible during verification.
     exit /b 1
 )
-if not defined CP_PYTHON call :find_python
+call :find_python
 if not defined CP_PYTHON (
     echo [%ESC%[31mFAILED%ESC%[0m] Python is not visible during verification.
     exit /b 1

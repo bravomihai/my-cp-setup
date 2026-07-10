@@ -3,6 +3,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 
 for /F "tokens=1 delims=#" %%A in ('"prompt #$E# & echo on & for %%B in (1) do rem"') do set "ESC=%%A"
 for %%I in ("%~dp0..") do set "ROOT=%%~fI"
+set "ORIGINAL_ARGS=%*"
 
 set "CHECK_ONLY=0"
 set "STATE_KEY=HKCU\Software\my-cp-setup"
@@ -18,6 +19,11 @@ echo [%ESC%[31mFAILED%ESC%[0m] Unknown argument: %~1
 exit /b 1
 
 :parsed_args
+if "%CHECK_ONLY%"=="0" (
+    call :ensure_admin
+    if errorlevel 2 exit /b 0
+    if errorlevel 1 exit /b 1
+)
 call :enable_ansi
 
 echo CP setup root:
@@ -66,6 +72,72 @@ exit /b 0
 reg add HKCU\Console /v VirtualTerminalLevel /t REG_DWORD /d 1 /f >nul 2>nul
 exit /b 0
 
+:ensure_admin
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$id=[Security.Principal.WindowsIdentity]::GetCurrent(); $principal=[Security.Principal.WindowsPrincipal]::new($id); if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { exit 0 }; exit 1"
+if not errorlevel 1 exit /b 0
+
+set "ELEVATE_PS=%TEMP%\cp_setup_uninstall_elevate_%RANDOM%_%RANDOM%.ps1"
+set "ELEVATE_LOG=%TEMP%\cp_setup_uninstall_elevate.log"
+set "ELEVATE_EXIT_FILE=%TEMP%\cp_setup_uninstall_elevate_exit_%RANDOM%_%RANDOM%.txt"
+set "ELEVATE_STARTED_FILE=%TEMP%\cp_setup_uninstall_elevate_started_%RANDOM%_%RANDOM%.txt"
+set "ELEVATE_CMD=%TEMP%\cp_setup_uninstall_elevate_%RANDOM%_%RANDOM%.cmd"
+set "CP_UNINSTALL_SCRIPT=%~f0"
+set "CP_UNINSTALL_ARGS=%ORIGINAL_ARGS%"
+set "CP_UNINSTALL_CWD=%ROOT%"
+> "%ELEVATE_CMD%" echo @echo off
+>> "%ELEVATE_CMD%" echo ^> "%ELEVATE_EXIT_FILE%" echo 900
+>> "%ELEVATE_CMD%" echo cd /d "%CP_UNINSTALL_CWD%"
+>> "%ELEVATE_CMD%" echo call "%CP_UNINSTALL_SCRIPT%" %CP_UNINSTALL_ARGS%
+>> "%ELEVATE_CMD%" echo set "CP_SETUP_EXIT=%%ERRORLEVEL%%"
+>> "%ELEVATE_CMD%" echo ^> "%ELEVATE_EXIT_FILE%" echo %%CP_SETUP_EXIT%%
+>> "%ELEVATE_CMD%" echo echo.
+>> "%ELEVATE_CMD%" echo echo Press any key to exit...
+>> "%ELEVATE_CMD%" echo pause ^>nul
+>> "%ELEVATE_CMD%" echo exit /b %%CP_SETUP_EXIT%%
+> "%ELEVATE_PS%" echo $ErrorActionPreference = 'Stop'
+>> "%ELEVATE_PS%" echo $requestLabel = 'Requesting administrator rights...'
+>> "%ELEVATE_PS%" echo $uninstallLabel = 'Administrator rights granted, uninstalling...'
+>> "%ELEVATE_PS%" echo $log = $env:ELEVATE_LOG
+>> "%ELEVATE_PS%" echo $esc = [char]27
+>> "%ELEVATE_PS%" echo $cr = [char]13
+>> "%ELEVATE_PS%" echo $clear = $esc + '[2K'
+>> "%ELEVATE_PS%" echo $green = $esc + '[38;5;114m'
+>> "%ELEVATE_PS%" echo $red = $esc + '[31m'
+>> "%ELEVATE_PS%" echo $reset = $esc + '[0m'
+>> "%ELEVATE_PS%" echo $exitFile = $env:ELEVATE_EXIT_FILE
+>> "%ELEVATE_PS%" echo $startedFile = $env:ELEVATE_STARTED_FILE
+>> "%ELEVATE_PS%" echo Remove-Item -LiteralPath $log,$exitFile,$startedFile -ErrorAction SilentlyContinue
+>> "%ELEVATE_PS%" echo $cmdPath = $env:ELEVATE_CMD
+>> "%ELEVATE_PS%" echo $job = Start-Job -ScriptBlock { param($cmdPath,$cwd,$log,$startedFile) try { $p = Start-Process -FilePath $cmdPath -WorkingDirectory $cwd -Verb RunAs -PassThru; 'started' ^| Set-Content -LiteralPath $startedFile; $p.WaitForExit(); 0 } catch { $_ ^| Out-String ^| Set-Content -LiteralPath $log; 1 } } -ArgumentList $cmdPath,$env:CP_UNINSTALL_CWD,$log,$startedFile
+>> "%ELEVATE_PS%" echo $frames = @([char]92,'-','/','^|')
+>> "%ELEVATE_PS%" echo $i = 0
+>> "%ELEVATE_PS%" echo while ($job.State -eq 'Running') { if (Test-Path -LiteralPath $startedFile) { $label = $uninstallLabel } else { $label = $requestLabel }; Write-Host -NoNewline ($cr + $clear + $frames[$i %% $frames.Count] + ' ' + $label); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
+>> "%ELEVATE_PS%" echo $jobResult = Receive-Job -Wait $job
+>> "%ELEVATE_PS%" echo Remove-Job $job -Force
+>> "%ELEVATE_PS%" echo $items = @($jobResult)
+>> "%ELEVATE_PS%" echo Remove-Item -LiteralPath $startedFile -ErrorAction SilentlyContinue
+>> "%ELEVATE_PS%" echo if ($items.Count -eq 0 -or [int]$items[-1] -ne 0) {
+>> "%ELEVATE_PS%" echo     $details = ''
+>> "%ELEVATE_PS%" echo     if (Test-Path -LiteralPath $log) { $details = Get-Content -LiteralPath $log -Raw }
+>> "%ELEVATE_PS%" echo     if ($details -match 'canceled by the user') { Write-Host ($cr + $clear + $red + 'Uninstall canceled by user.' + $reset); exit 1 }
+>> "%ELEVATE_PS%" echo     if ($details -match 'Access is denied') { Write-Host ($cr + $clear + $red + 'Uninstall failed: administrator rights were denied.' + $reset); exit 1 }
+>> "%ELEVATE_PS%" echo     Write-Host ($cr + $clear + $red + 'Uninstall failed while requesting administrator rights.' + $reset)
+>> "%ELEVATE_PS%" echo     if ($details) { Write-Host $details }
+>> "%ELEVATE_PS%" echo     exit 1
+>> "%ELEVATE_PS%" echo }
+>> "%ELEVATE_PS%" echo if (-not (Test-Path -LiteralPath $exitFile)) { Write-Host ($cr + $clear + $red + 'Uninstall failed: uninstaller did not report an exit code.' + $reset); exit 1 }
+>> "%ELEVATE_PS%" echo $childExit = [int]((Get-Content -LiteralPath $exitFile -ErrorAction Stop ^| Select-Object -First 1).Trim())
+>> "%ELEVATE_PS%" echo Remove-Item -LiteralPath $exitFile -ErrorAction SilentlyContinue
+>> "%ELEVATE_PS%" echo if ($childExit -eq 0) { Write-Host ($cr + $clear + $green + 'Uninstall completed' + $reset); exit 0 }
+>> "%ELEVATE_PS%" echo Write-Host ($cr + $clear + $red + ('Uninstall failed: elevated uninstaller exited with code ' + $childExit) + $reset)
+>> "%ELEVATE_PS%" echo exit 1
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ELEVATE_PS%"
+set "ELEVATE_EXIT=%ERRORLEVEL%"
+del "%ELEVATE_PS%" >nul 2>nul
+del "%ELEVATE_CMD%" >nul 2>nul
+if not "%ELEVATE_EXIT%"=="0" exit /b 1
+exit /b 2
+
 :check_state
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $macros=Join-Path $root 'scripts\cp_macros'; $command='doskey /macrofile=\"'+$macros+'\"'; $targets=@((Join-Path $root 'scripts'),'C:\Program Files\Git\cmd','C:\Program Files\Git\usr\bin','C:\Program Files\Git\mingw64\libexec\git-core','D:\software\programming\git\Git\cmd','D:\software\programming\git\Git\usr\bin','D:\software\programming\git\Git\mingw64\libexec\git-core','C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin'); if (Test-Path -LiteralPath 'C:\Program Files\Eclipse Adoptium') { $targets += Get-ChildItem -LiteralPath 'C:\Program Files\Eclipse Adoptium' -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'bin' } }; $path=[Environment]::GetEnvironmentVariable('Path','User'); $parts=@($path -split ';' | Where-Object { $_ }); $foundPath=@($parts | Where-Object { $p=$_; @($targets | Where-Object { $p.TrimEnd('\') -ieq $_.TrimEnd('\') }).Count -gt 0 }); $vars=@('XDG_CONFIG_HOME','CP_SETUP_ROOT','CP_PYTHON','CP_GPP') | ForEach-Object { $v=[Environment]::GetEnvironmentVariable($_,'User'); if ($v) { [pscustomobject]@{Name=$_;Value=$v} } }; $autorun=(Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Command Processor' -Name AutoRun -ErrorAction SilentlyContinue).AutoRun; $hasMacro=$autorun -and $autorun.IndexOf($command,[StringComparison]::OrdinalIgnoreCase) -ge 0; $esc=[char]27; $found='['+$esc+'[38;5;114mFOUND'+$esc+'[0m]'; $clear='['+$esc+'[38;5;114mCLEAR'+$esc+'[0m]'; if ($foundPath.Count) { Write-Host ($found+' PATH entries managed by setup') } else { Write-Host ($clear+' PATH entries managed by setup') }; foreach ($v in $vars) { Write-Host ($found+' '+$v.Name+'='+$v.Value) }; if (-not $vars) { Write-Host ($clear+' CP environment variables') }; if ($hasMacro) { Write-Host ($found+' CMD AutoRun loads cp_macros') } else { Write-Host ($clear+' CMD AutoRun for cp_macros') }"
 if errorlevel 1 exit /b 1
@@ -100,7 +172,6 @@ call :find_msys2_shell
 if errorlevel 1 exit /b 0
 
 echo.
-echo [%ESC%[38;5;114mFOUND%ESC%[0m] MSYS2 installed by this setup
 call :ask_yes_no "Uninstall MSYS2 and its CP toolchain"
 if errorlevel 1 goto maybe_pacman
 
@@ -117,11 +188,10 @@ call :uninstall_pacman_toolchain
 exit /b %ERRORLEVEL%
 
 :uninstall_winget_component
-call :command_exists "%~3"
+call :search_command "%~1" "where.exe %~3" "FOUND_COMPONENT_PATH"
 if errorlevel 1 exit /b 0
 
 echo.
-echo [%ESC%[38;5;114mFOUND%ESC%[0m] %~1 installed by this setup
 call :ask_yes_no "Uninstall %~1"
 if errorlevel 1 (
     echo [%ESC%[38;5;244mKEPT%ESC%[0m] %~1
@@ -145,7 +215,6 @@ exit /b 1
 
 :uninstall_pacman_toolchain
 echo.
-echo [%ESC%[38;5;114mFOUND%ESC%[0m] MSYS2 CP toolchain packages
 call :ask_yes_no "Remove the CP toolchain from MSYS2"
 if errorlevel 1 (
     echo [%ESC%[38;5;244mKEPT%ESC%[0m] MSYS2 CP toolchain
@@ -171,10 +240,6 @@ exit /b 0
 reg query "%STATE_KEY%" /v "%~1" >nul 2>nul
 exit /b %ERRORLEVEL%
 
-:command_exists
-where "%~1" >nul 2>nul
-exit /b %ERRORLEVEL%
-
 :clear_state
 reg delete "%STATE_KEY%" /v "%~1" /f >nul 2>nul
 exit /b 0
@@ -191,7 +256,7 @@ exit /b 0
 setlocal EnableExtensions EnableDelayedExpansion
 :ask_yes_no_again
 set "ANSWER="
-set /p "ANSWER=%~1 [y/n]: "
+set /p "ANSWER=%~1 [Y/N]: "
 for %%A in (y ye yes yeah) do if /I "!ANSWER!"=="%%A" (
     endlocal
     exit /b 0
@@ -212,21 +277,76 @@ echo [%ESC%[31mFAILED%ESC%[0m] winget was not found.
 exit /b 1
 
 :find_msys2_shell
-set "MSYS2_SHELL="
-if exist "C:\msys64\msys2_shell.cmd" set "MSYS2_SHELL=C:\msys64\msys2_shell.cmd"
-if not defined MSYS2_SHELL if exist "D:\software\programming\msys2\msys2_shell.cmd" set "MSYS2_SHELL=D:\software\programming\msys2\msys2_shell.cmd"
 if defined MSYS2_SHELL exit /b 0
-for /F "usebackq delims=" %%P in (`where msys2_shell.cmd 2^>nul`) do if not defined MSYS2_SHELL set "MSYS2_SHELL=%%P"
-if defined MSYS2_SHELL exit /b 0
-exit /b 1
+set "MSYS2_FINDER=%TEMP%\cp_setup_find_msys2_%RANDOM%_%RANDOM%.cmd"
+> "%MSYS2_FINDER%" echo @echo off
+>> "%MSYS2_FINDER%" echo if exist "C:\msys64\msys2_shell.cmd" ^(
+>> "%MSYS2_FINDER%" echo     echo C:\msys64\msys2_shell.cmd
+>> "%MSYS2_FINDER%" echo     exit /b 0
+>> "%MSYS2_FINDER%" echo ^)
+>> "%MSYS2_FINDER%" echo if exist "D:\software\programming\msys2\msys2_shell.cmd" ^(
+>> "%MSYS2_FINDER%" echo     echo D:\software\programming\msys2\msys2_shell.cmd
+>> "%MSYS2_FINDER%" echo     exit /b 0
+>> "%MSYS2_FINDER%" echo ^)
+>> "%MSYS2_FINDER%" echo where.exe msys2_shell.cmd
+>> "%MSYS2_FINDER%" echo exit /b %%ERRORLEVEL%%
+set "SEARCH_COMMAND_INPUT=call ""%MSYS2_FINDER%"""
+call :search_command "MSYS2" "@env" "MSYS2_SHELL"
+set "MSYS2_EXIT=!ERRORLEVEL!"
+del "%MSYS2_FINDER%" >nul 2>nul
+exit /b !MSYS2_EXIT!
 
 :has_pacman_toolchain
 call :find_msys2_shell
 if errorlevel 1 exit /b 1
 for %%I in ("%MSYS2_SHELL%") do set "MSYS2_BASH=%%~dpIusr\bin\bash.exe"
 if not exist "%MSYS2_BASH%" exit /b 1
-"%MSYS2_BASH%" -lc "pacman -Q mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python > /dev/null 2>&1"
-exit /b %ERRORLEVEL%
+set "PACMAN_CHECKER=%TEMP%\cp_setup_find_pacman_%RANDOM%_%RANDOM%.cmd"
+> "%PACMAN_CHECKER%" echo @echo off
+>> "%PACMAN_CHECKER%" echo "%MSYS2_BASH%" -lc "pacman -Q mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python ^> /dev/null 2^>^&1"
+>> "%PACMAN_CHECKER%" echo exit /b %%ERRORLEVEL%%
+set "SEARCH_COMMAND_INPUT=call ""%PACMAN_CHECKER%"""
+call :search_command "MSYS2 CP toolchain" "@env" "PACMAN_TOOLCHAIN"
+set "PACMAN_CHECK_EXIT=!ERRORLEVEL!"
+del "%PACMAN_CHECKER%" >nul 2>nul
+exit /b !PACMAN_CHECK_EXIT!
+
+:search_command
+setlocal EnableExtensions EnableDelayedExpansion
+set "SEARCH_LABEL=%~1"
+if /i "%~2"=="@env" (
+    set "SEARCH_COMMAND=!SEARCH_COMMAND_INPUT!"
+) else (
+    set "SEARCH_COMMAND=%~2"
+)
+set "SEARCH_RESULT_FILE=%TEMP%\cp_setup_search_%RANDOM%_%RANDOM%.txt"
+set "SEARCH_PS=%TEMP%\cp_setup_search_%RANDOM%_%RANDOM%.ps1"
+> "%SEARCH_PS%" echo $label = $env:SEARCH_LABEL
+>> "%SEARCH_PS%" echo $command = $env:SEARCH_COMMAND
+>> "%SEARCH_PS%" echo $output = $env:SEARCH_RESULT_FILE
+>> "%SEARCH_PS%" echo $esc = [char]27
+>> "%SEARCH_PS%" echo $cr = [char]13
+>> "%SEARCH_PS%" echo $clear = $esc + '[2K'
+>> "%SEARCH_PS%" echo $searching = '[' + $esc + '[38;5;183mSEARCHING' + $esc + '[0m]'
+>> "%SEARCH_PS%" echo $found = '[' + $esc + '[38;5;114mFOUND' + $esc + '[0m]'
+>> "%SEARCH_PS%" echo $frames = @([char]92,'-','/','^|')
+>> "%SEARCH_PS%" echo $job = Start-Job -ScriptBlock { param($command) $items = @(^& $env:ComSpec /d /c $command 2^>$null); [pscustomobject]@{ ExitCode = $LASTEXITCODE; Items = $items } } -ArgumentList $command
+>> "%SEARCH_PS%" echo $i = 0
+>> "%SEARCH_PS%" echo do { Write-Host -NoNewline ($cr + $clear + $searching + ' ' + $frames[$i %% $frames.Count] + ' ' + $label); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ } while ($job.State -eq 'Running')
+>> "%SEARCH_PS%" echo $result = Receive-Job -Wait $job
+>> "%SEARCH_PS%" echo Remove-Job $job -Force
+>> "%SEARCH_PS%" echo $items = @($result.Items)
+>> "%SEARCH_PS%" echo if ($items.Count) { [IO.File]::WriteAllLines($output,[string[]]$items) } else { [IO.File]::WriteAllText($output,'') }
+>> "%SEARCH_PS%" echo $exitCode = [int]$result.ExitCode
+>> "%SEARCH_PS%" echo if ($exitCode -eq 0) { Write-Host ($cr + $clear + $found + ' ' + $label) } else { Write-Host -NoNewline ($cr + $clear) }
+>> "%SEARCH_PS%" echo exit $exitCode
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SEARCH_PS%"
+set "SEARCH_EXIT=%ERRORLEVEL%"
+set "SEARCH_VALUE="
+for /F "usebackq delims=" %%P in ("%SEARCH_RESULT_FILE%") do if not defined SEARCH_VALUE set "SEARCH_VALUE=%%P"
+del "%SEARCH_PS%" >nul 2>nul
+del "%SEARCH_RESULT_FILE%" >nul 2>nul
+endlocal & set "%~3=%SEARCH_VALUE%" & exit /b %SEARCH_EXIT%
 
 :run_command_spinner
 set "SPIN_LABEL=%~1"
