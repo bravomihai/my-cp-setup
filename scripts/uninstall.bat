@@ -176,14 +176,17 @@ if errorlevel 1 exit /b 1
 call :find_msys2_shell
 if errorlevel 1 exit /b 0
 
-echo.
 call :ask_yes_no "Uninstall MSYS2 and its CP toolchain"
-if errorlevel 1 goto maybe_pacman
+if errorlevel 1 (
+    echo.
+    goto maybe_pacman
+)
 
 call :uninstall_winget_now "MSYS2" "MSYS2.MSYS2"
 if errorlevel 1 exit /b 1
 call :clear_state "Winget.MSYS2"
 call :clear_state "Pacman.Toolchain"
+echo.
 exit /b 0
 
 :maybe_pacman
@@ -196,16 +199,17 @@ exit /b %ERRORLEVEL%
 call :search_command "%~1" "where.exe %~3" "FOUND_COMPONENT_PATH"
 if errorlevel 1 exit /b 0
 
-echo.
 call :ask_yes_no "Uninstall %~1"
 if errorlevel 1 (
     echo [%ESC%[38;5;244mKEPT%ESC%[0m] %~1
+    echo.
     exit /b 0
 )
 
 call :uninstall_winget_now "%~1" "%~2"
 if errorlevel 1 exit /b 1
 call :clear_state "%~4"
+echo.
 exit /b 0
 
 :uninstall_winget_now
@@ -219,10 +223,10 @@ echo Log: %TEMP%\cp_setup_winget_uninstall.log
 exit /b 1
 
 :uninstall_pacman_toolchain
-echo.
 call :ask_yes_no "Remove the CP toolchain from MSYS2"
 if errorlevel 1 (
     echo [%ESC%[38;5;244mKEPT%ESC%[0m] MSYS2 CP toolchain
+    echo.
     exit /b 0
 )
 
@@ -239,6 +243,7 @@ if errorlevel 1 (
     exit /b 1
 )
 call :clear_state "Pacman.Toolchain"
+echo.
 exit /b 0
 
 :state_has
