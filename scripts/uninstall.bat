@@ -6,16 +6,29 @@ for %%I in ("%~dp0..") do set "ROOT=%%~fI"
 set "ORIGINAL_ARGS=%*"
 
 set "CHECK_ONLY=0"
+set "ALL_MODE=0"
+set "CAN_REMOVE_REPO=1"
 set "STATE_KEY=HKCU\Software\my-cp-setup"
 
 :parse_args
 if "%~1"=="" goto parsed_args
 if /i "%~1"=="--check" (
+    if "%ALL_MODE%"=="1" goto incompatible_args
     set "CHECK_ONLY=1"
     shift
     goto parse_args
 )
+if /i "%~1"=="--all" (
+    if "%CHECK_ONLY%"=="1" goto incompatible_args
+    set "ALL_MODE=1"
+    shift
+    goto parse_args
+)
 echo [%ESC%[31mFAILED%ESC%[0m] Unknown argument: %~1
+exit /b 1
+
+:incompatible_args
+echo [%ESC%[31mFAILED%ESC%[0m] Use either --check or --all, not both.
 exit /b 1
 
 :parsed_args
@@ -36,8 +49,22 @@ if "%CHECK_ONLY%"=="1" (
     exit /b %ERRORLEVEL%
 )
 
-call :remove_external_components
+if "%ALL_MODE%"=="1" (
+    call :remove_all_external_components
+) else (
+    call :remove_external_components
+)
 if errorlevel 1 goto failed
+
+if "%ALL_MODE%"=="0" (
+    echo.
+    call :ask_yes_no "Remove CP setup configuration"
+    if errorlevel 1 (
+        echo [%ESC%[38;5;244mKEPT%ESC%[0m] CP setup configuration
+        set "CAN_REMOVE_REPO=0"
+        goto decide_repo_removal
+    )
+)
 
 echo.
 echo [%ESC%[38;5;183mCHECKING%ESC%[0m] CP setup configuration
@@ -51,6 +78,9 @@ call :remove_cmd_macros
 if errorlevel 1 goto failed
 
 call :clear_empty_state
+
+:decide_repo_removal
+if "%ALL_MODE%"=="0" if not "%CAN_REMOVE_REPO%"=="1" goto repo_kept
 
 echo.
 call :ask_yes_no "Remove this CP setup folder too"
@@ -66,6 +96,12 @@ if not errorlevel 1 (
 echo.
 echo [%ESC%[32mDONE%ESC%[0m] CP setup configuration removed.
 echo External components you kept remain installed.
+echo Restart terminals so environment changes are visible everywhere.
+exit /b 0
+
+:repo_kept
+echo.
+echo [%ESC%[38;5;244mKEPT%ESC%[0m] CP setup folder because setup components or configuration were kept.
 echo Restart terminals so environment changes are visible everywhere.
 exit /b 0
 
@@ -178,6 +214,7 @@ if errorlevel 1 exit /b 0
 
 call :ask_yes_no "Uninstall MSYS2 and its CP toolchain"
 if errorlevel 1 (
+    set "CAN_REMOVE_REPO=0"
     echo.
     goto maybe_pacman
 )
@@ -195,24 +232,82 @@ if errorlevel 1 exit /b 0
 call :uninstall_pacman_toolchain
 exit /b %ERRORLEVEL%
 
+:remove_all_external_components
+call :state_has "Winget.Git"
+if not errorlevel 1 (
+    call :uninstall_git
+    if errorlevel 1 exit /b 1
+)
+
+call :state_has "Winget.Neovim"
+if not errorlevel 1 (
+    call :uninstall_winget_component "Neovim" "Neovim.Neovim" "nvim" "Winget.Neovim" "Neovim, CP config, and LazyVim data"
+    if errorlevel 1 exit /b 1
+)
+
+call :state_has "Winget.JDK"
+if not errorlevel 1 (
+    call :uninstall_winget_component "JDK" "EclipseAdoptium.Temurin.21.JDK" "javac" "Winget.JDK"
+    if errorlevel 1 exit /b 1
+)
+
+call :state_has "Winget.MSYS2"
+if not errorlevel 1 (
+    call :find_msys2_shell
+    if errorlevel 1 (
+        call :clear_state "Winget.MSYS2"
+        call :clear_state "Pacman.Toolchain"
+    ) else (
+        call :uninstall_msys2
+        if errorlevel 1 exit /b 1
+        call :clear_state "Winget.MSYS2"
+        call :clear_state "Pacman.Toolchain"
+    )
+    exit /b 0
+)
+
+call :state_has "Pacman.Toolchain"
+if not errorlevel 1 (
+    call :find_msys2_shell
+    if errorlevel 1 (
+        call :clear_state "Pacman.Toolchain"
+    ) else (
+        call :uninstall_pacman_toolchain
+        if errorlevel 1 exit /b 1
+    )
+)
+exit /b 0
+
 :uninstall_winget_component
 call :search_command "%~1" "where.exe %~3" "FOUND_COMPONENT_PATH"
-if errorlevel 1 exit /b 0
+if errorlevel 1 (
+    if "%ALL_MODE%"=="1" call :clear_state "%~4"
+    if "%ALL_MODE%"=="1" if /I "%~4"=="Winget.Neovim" call :remove_nvim_data
+    exit /b 0
+)
 
 call :winget_has_package "%~2"
 if errorlevel 1 (
+    if "%ALL_MODE%"=="1" (
+        echo [%ESC%[31mFAILED%ESC%[0m] %~1 is marked as installed by setup but is not registered with winget.
+        exit /b 1
+    )
     echo [%ESC%[38;5;244mKEPT%ESC%[0m] %~1 is not registered with winget.
+    set "CAN_REMOVE_REPO=0"
     echo.
     exit /b 0
 )
 
-set "UNINSTALL_PROMPT=%~5"
-if not defined UNINSTALL_PROMPT set "UNINSTALL_PROMPT=%~1"
-call :ask_yes_no "Uninstall %UNINSTALL_PROMPT%"
-if errorlevel 1 (
-    echo [%ESC%[38;5;244mKEPT%ESC%[0m] %~1
-    echo.
-    exit /b 0
+if "%ALL_MODE%"=="0" (
+    set "UNINSTALL_PROMPT=%~5"
+    if not defined UNINSTALL_PROMPT set "UNINSTALL_PROMPT=%~1"
+    call :ask_yes_no "Uninstall %UNINSTALL_PROMPT%"
+    if errorlevel 1 (
+        echo [%ESC%[38;5;244mKEPT%ESC%[0m] %~1
+        set "CAN_REMOVE_REPO=0"
+        echo.
+        exit /b 0
+    )
 )
 
 call :uninstall_winget_now "%~1" "%~2"
@@ -227,17 +322,23 @@ exit /b 0
 
 :uninstall_git
 call :search_command "Git" "where.exe git" "FOUND_GIT_PATH"
-if errorlevel 1 exit /b 0
+if errorlevel 1 (
+    if "%ALL_MODE%"=="1" call :clear_state "Winget.Git"
+    exit /b 0
+)
 
 for %%I in ("%FOUND_GIT_PATH%") do set "GIT_BIN=%%~dpI"
 for %%I in ("%GIT_BIN%\..") do set "GIT_ROOT=%%~fI"
 if not exist "%GIT_ROOT%\unins000.exe" goto uninstall_git_winget
 
-call :ask_yes_no "Uninstall Git"
-if errorlevel 1 (
-    echo [%ESC%[38;5;244mKEPT%ESC%[0m] Git
-    echo.
-    exit /b 0
+if "%ALL_MODE%"=="0" (
+    call :ask_yes_no "Uninstall Git"
+    if errorlevel 1 (
+        echo [%ESC%[38;5;244mKEPT%ESC%[0m] Git
+        set "CAN_REMOVE_REPO=0"
+        echo.
+        exit /b 0
+    )
 )
 
 set "UNINSTALL_CMD="%GIT_ROOT%\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
@@ -284,11 +385,14 @@ call :uninstall_winget_now "MSYS2" "MSYS2.MSYS2"
 exit /b %ERRORLEVEL%
 
 :uninstall_pacman_toolchain
-call :ask_yes_no "Remove the CP toolchain from MSYS2"
-if errorlevel 1 (
-    echo [%ESC%[38;5;244mKEPT%ESC%[0m] MSYS2 CP toolchain
-    echo.
-    exit /b 0
+if "%ALL_MODE%"=="0" (
+    call :ask_yes_no "Remove the CP toolchain from MSYS2"
+    if errorlevel 1 (
+        echo [%ESC%[38;5;244mKEPT%ESC%[0m] MSYS2 CP toolchain
+        set "CAN_REMOVE_REPO=0"
+        echo.
+        exit /b 0
+    )
 )
 
 call :find_msys2_shell
