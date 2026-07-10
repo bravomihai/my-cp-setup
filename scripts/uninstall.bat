@@ -204,7 +204,7 @@ exit /b %ERRORLEVEL%
 :remove_external_components
 call :uninstall_git
 if errorlevel 1 exit /b 1
-call :uninstall_winget_component "Neovim" "Neovim.Neovim" "nvim" "Winget.Neovim" "Neovim, CP config, and LazyVim data"
+call :uninstall_winget_component "Neovim" "Neovim.Neovim" "nvim" "Winget.Neovim" "Neovim and generated LazyVim data"
 if errorlevel 1 exit /b 1
 call :uninstall_winget_component "JDK" "EclipseAdoptium.Temurin.21.JDK" "javac" "Winget.JDK"
 if errorlevel 1 exit /b 1
@@ -241,7 +241,7 @@ if not errorlevel 1 (
 
 call :state_has "Winget.Neovim"
 if not errorlevel 1 (
-    call :uninstall_winget_component "Neovim" "Neovim.Neovim" "nvim" "Winget.Neovim" "Neovim, CP config, and LazyVim data"
+    call :uninstall_winget_component "Neovim" "Neovim.Neovim" "nvim" "Winget.Neovim" "Neovim and generated LazyVim data"
     if errorlevel 1 exit /b 1
 )
 
@@ -282,7 +282,7 @@ exit /b 0
 call :search_command "%~1" "where.exe %~3" "FOUND_COMPONENT_PATH"
 if errorlevel 1 (
     if "%ALL_MODE%"=="1" call :clear_state "%~4"
-    if "%ALL_MODE%"=="1" if /I "%~4"=="Winget.Neovim" call :remove_nvim_data
+    if "%ALL_MODE%"=="1" if /I "%~4"=="Winget.Neovim" call :remove_nvim_generated_data
     exit /b 0
 )
 
@@ -314,7 +314,7 @@ call :uninstall_winget_now "%~1" "%~2"
 if errorlevel 1 exit /b 1
 call :clear_state "%~4"
 if /I "%~4"=="Winget.Neovim" (
-    call :remove_nvim_data
+    call :remove_nvim_generated_data
     if errorlevel 1 exit /b 1
 )
 echo.
@@ -427,8 +427,8 @@ for %%V in (Winget.Git Winget.Neovim Winget.JDK Winget.MSYS2 Pacman.Toolchain) d
 reg delete "%STATE_KEY%" /f >nul 2>nul
 exit /b 0
 
-:remove_nvim_data
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $esc=[char]27; $removed='['+$esc+'[38;5;114mREMOVED'+$esc+'[0m]'; $targets=@((Join-Path $root 'nvim'),(Join-Path $env:LOCALAPPDATA 'nvim-data')); foreach ($target in $targets) { if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop; Write-Host ($removed+' '+$target) } }"
+:remove_nvim_generated_data
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$esc=[char]27; $removed='['+$esc+'[38;5;114mREMOVED'+$esc+'[0m]'; $target=Join-Path $env:LOCALAPPDATA 'nvim-data'; if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop; Write-Host ($removed+' '+$target) }"
 exit /b %ERRORLEVEL%
 
 :ask_yes_no

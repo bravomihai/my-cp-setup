@@ -488,7 +488,7 @@ call :require_winget
 if errorlevel 1 exit /b 1
 call :find_msys2_shell
 if errorlevel 1 (
-    set "INSTALL_CMD=!WINGET! install --id MSYS2.MSYS2 %WINGET_ARGS% --override "install --confirm-command --root C:\msys64""
+    set "INSTALL_CMD=!WINGET! install --id MSYS2.MSYS2 %WINGET_QUIET_ARGS% --override "install --confirm-command --root C:\msys64""
     call :run_install_spinner "MSYS2 via winget: MSYS2.MSYS2" "" "%TEMP%\cp_setup_winget.log"
     set "INSTALL_EXIT=%ERRORLEVEL%"
     call :find_msys2_shell quiet
