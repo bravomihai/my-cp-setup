@@ -51,7 +51,7 @@ scripts\install.bat
 - usable Python 3, preferring MSYS2 Python and ignoring the Microsoft Store `WindowsApps` alias
 - `ac-library` submodule state
 
-If a tool is missing during a normal install, it tries to install it with `winget`. For C++ and Python, it installs MSYS2 externally and installs only the CP toolchain with `pacman`: GCC, GDB, clang tools, Python, and Ruff. `--verbose` also shows the resolved executable paths after installation.
+If a tool is missing during a normal install, it tries to install it with `winget`. For C++ and Python, it installs MSYS2 externally and installs only the CP toolchain with `pacman`: GCC, GDB, clang tools, and Python. `--verbose` also shows the resolved executable paths after installation.
 
 The installer also:
 

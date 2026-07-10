@@ -629,12 +629,9 @@ reg add "%STATE_KEY%" /v "%~1" /t REG_DWORD /d 1 /f >nul
 exit /b %ERRORLEVEL%
 
 :ensure_ruff
-call :search_command "Ruff" "where.exe ruff" "FOUND_RUFF_PATH"
+if "%CHECK_ONLY%"=="1" exit /b 0
+where.exe ruff >nul 2>nul
 if not errorlevel 1 exit /b 0
-if "%CHECK_ONLY%"=="1" (
-    call :print_missing "Ruff"
-    exit /b 0
-)
 call :install_msys2_toolchain
 exit /b %ERRORLEVEL%
 

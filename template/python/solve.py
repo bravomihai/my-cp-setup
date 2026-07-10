@@ -18,6 +18,7 @@ def main():
         solve()
 
     flush()
+    out("\n")
     out(f"{timer.elapsed():.6f}s")
 
 

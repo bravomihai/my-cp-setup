@@ -313,10 +313,12 @@ exit /b 1
 :winget_has_package
 call :require_winget
 if errorlevel 1 exit /b 1
-set "WINGET_PACKAGE="
-for /F "usebackq delims=" %%P in (`"%WINGET%" list --id %~1 --exact --source winget --disable-interactivity 2^>nul ^| findstr /I /C:"%~1"`) do set "WINGET_PACKAGE=%%P"
-if defined WINGET_PACKAGE exit /b 0
-exit /b 1
+set "WINGET_LIST=%TEMP%\cp_setup_winget_list_%RANDOM%_%RANDOM%.txt"
+"%WINGET%" list --id %~1 --exact --source winget --disable-interactivity > "%WINGET_LIST%" 2>nul
+findstr /I /C:"%~1" "%WINGET_LIST%" >nul
+set "WINGET_EXIT=%ERRORLEVEL%"
+del "%WINGET_LIST%" >nul 2>nul
+exit /b %WINGET_EXIT%
 
 :find_msys2_shell
 if defined MSYS2_SHELL exit /b 0
