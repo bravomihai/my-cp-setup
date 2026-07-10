@@ -251,9 +251,12 @@ set "INSTALL_EXIT=%ERRORLEVEL%"
 call :install_paths
 if errorlevel 1 exit /b 1
 call :refresh_path
-call :search_command "Git" "where.exe git" "FOUND_GIT_PATH"
+call :find_command "git" "FOUND_GIT_PATH"
 if not errorlevel 1 (
-    if "%INSTALL_EXIT%"=="0" call :record_component "Winget.Git"
+    if "%INSTALL_EXIT%"=="0" (
+        call :record_component "Winget.Git"
+        if "%VERBOSE%"=="1" echo [%ESC%[38;5;114mINSTALLED%ESC%[0m] Git: %FOUND_GIT_PATH%
+    )
     exit /b 0
 )
 if not "%INSTALL_EXIT%"=="0" (
@@ -288,9 +291,12 @@ set "INSTALL_EXIT=%ERRORLEVEL%"
 call :install_paths
 if errorlevel 1 exit /b 1
 call :refresh_path
-call :search_command "%~3" "where.exe %~1" "FOUND_TOOL_PATH"
+call :find_command "%~1" "FOUND_TOOL_PATH"
 if not errorlevel 1 (
-    if "%INSTALL_EXIT%"=="0" call :record_component "%~4"
+    if "%INSTALL_EXIT%"=="0" (
+        call :record_component "%~4"
+        if "%VERBOSE%"=="1" echo [%ESC%[38;5;114mINSTALLED%ESC%[0m] %~3: %FOUND_TOOL_PATH%
+    )
     exit /b 0
 )
 if not "%INSTALL_EXIT%"=="0" (
@@ -329,6 +335,15 @@ if "%VERBOSE%"=="1" (
     call :print_found "%~1"
 )
 exit /b 0
+
+:find_command
+setlocal EnableExtensions EnableDelayedExpansion
+set "FOUND_PATH="
+for /F "usebackq delims=" %%P in (`where.exe "%~1" 2^>nul`) do if not defined FOUND_PATH set "FOUND_PATH=%%P"
+if defined FOUND_PATH (
+    endlocal & set "%~2=%FOUND_PATH%" & exit /b 0
+)
+endlocal & set "%~2=" & exit /b 1
 
 :print_missing
 set /A MISSING_COUNT+=1
@@ -460,8 +475,10 @@ if errorlevel 1 (
         if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
         exit /b 1
     )
-    if "%INSTALL_EXIT%"=="0" call :record_component "Winget.MSYS2"
-    if "%VERBOSE%"=="1" call :print_found_path "MSYS2" "%MSYS2_SHELL%"
+    if "%INSTALL_EXIT%"=="0" (
+        call :record_component "Winget.MSYS2"
+        if "%VERBOSE%"=="1" echo [%ESC%[38;5;114mINSTALLED%ESC%[0m] MSYS2: %MSYS2_SHELL%
+    )
 )
 if "%VERBOSE%"=="1" (
     echo [%ESC%[38;5;153mINSTALLING%ESC%[0m] MSYS2 toolchain via pacman
@@ -476,6 +493,7 @@ if errorlevel 1 (
     exit /b 1
 )
 call :record_component "Pacman.Toolchain"
+if "%VERBOSE%"=="1" echo [%ESC%[38;5;114mINSTALLED%ESC%[0m] MSYS2 toolchain via pacman
 exit /b %ERRORLEVEL%
 
 :run_pacman_spinner

@@ -147,7 +147,7 @@ On failure it prints an `EXPAND FAILED` message.
 - `XDG_CONFIG_HOME`, `CP_SETUP_ROOT`, `CP_PYTHON`, and `CP_GPP` when they point to this setup or the known MSYS2 install paths
 - its CMD AutoRun command for `scripts\cp_macros`, while preserving other commands
 
-It then asks `Y/N` before removing available Git, Neovim, JDK, or MSYS2 components. If MSYS2 is kept, it separately asks whether to remove the CP packages installed through `pacman`. Finally, it asks whether to remove the repository folder itself.
+It then asks before removing available Git, Neovim, JDK, or MSYS2 components. If MSYS2 is kept, it separately asks whether to remove the CP packages installed through `pacman`. Finally, it asks whether to remove the repository folder itself. It accepts `y`, `ye`, `yes`, or `yeah` to confirm; `n`, `no`, or `nah` to decline, in any letter case.
 
 Preview without changing anything:
 

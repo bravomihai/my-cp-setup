@@ -188,9 +188,20 @@ reg delete "%STATE_KEY%" /f >nul 2>nul
 exit /b 0
 
 :ask_yes_no
-choice /C YN /N /M "%~1"
-if errorlevel 2 exit /b 1
-exit /b 0
+setlocal EnableExtensions EnableDelayedExpansion
+:ask_yes_no_again
+set "ANSWER="
+set /p "ANSWER=%~1 [y/n]: "
+for %%A in (y ye yes yeah) do if /I "!ANSWER!"=="%%A" (
+    endlocal
+    exit /b 0
+)
+for %%A in (n no nah) do if /I "!ANSWER!"=="%%A" (
+    endlocal
+    exit /b 1
+)
+echo [%ESC%[33mINVALID%ESC%[0m] Please answer yes or no.
+goto ask_yes_no_again
 
 :require_winget
 set "WINGET="
