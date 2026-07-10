@@ -18,7 +18,7 @@ Verify without changing environment variables:
 scripts\install.bat --check
 ```
 
-Show resolved executable paths and package-manager output during installation. Long-running package operations keep their spinner, then print the detailed log:
+Show resolved executable paths during installation. Long-running package operations keep the same spinner as a normal install:
 
 ```bat
 scripts\install.bat --verbose

@@ -25,6 +25,7 @@ if "%CHECK_ONLY%"=="0" (
     if errorlevel 1 exit /b 1
 )
 call :enable_ansi
+call :refresh_path
 
 echo CP setup root:
 echo %ROOT%
@@ -70,6 +71,10 @@ exit /b 0
 
 :enable_ansi
 reg add HKCU\Console /v VirtualTerminalLevel /t REG_DWORD /d 1 /f >nul 2>nul
+exit /b 0
+
+:refresh_path
+for /F "usebackq tokens=* delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"`) do set "PATH=%%P"
 exit /b 0
 
 :ensure_admin

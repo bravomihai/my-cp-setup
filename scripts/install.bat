@@ -56,9 +56,9 @@ if "%CHECK_ONLY%"=="1" (
 
 call :need_git
 if errorlevel 1 goto failed
-call :need_or_install nvim Neovim.Neovim "Neovim" "Winget.Neovim"
+call :need_or_install nvim Neovim.Neovim "Neovim" "Winget.Neovim" "FOUND_NVIM_PATH"
 if errorlevel 1 goto failed
-call :need_or_install javac EclipseAdoptium.Temurin.21.JDK "JDK" "Winget.JDK"
+call :need_or_install javac EclipseAdoptium.Temurin.21.JDK "JDK" "Winget.JDK" "FOUND_JAVAC_PATH"
 if errorlevel 1 goto failed
 
 call :search_command "g++" "where.exe g++" "FOUND_GPP_PATH"
@@ -240,13 +240,8 @@ if "%CHECK_ONLY%"=="1" (
 call :require_winget
 if errorlevel 1 exit /b 1
 
-if "%VERBOSE%"=="1" (
-    echo [%ESC%[38;5;153mINSTALLING%ESC%[0m] Git via winget: Git.Git
-    "%WINGET%" install --id Git.Git %WINGET_ARGS%
-) else (
-    set "INSTALL_CMD=!WINGET! install --id Git.Git %WINGET_QUIET_ARGS%"
-    call :run_install_spinner "Git via winget: Git.Git" "" "%TEMP%\cp_setup_winget.log"
-)
+set "INSTALL_CMD=!WINGET! install --id Git.Git %WINGET_QUIET_ARGS%"
+call :run_install_spinner "Git via winget: Git.Git" "" "%TEMP%\cp_setup_winget.log"
 set "INSTALL_EXIT=%ERRORLEVEL%"
 call :install_paths
 if errorlevel 1 exit /b 1
@@ -255,22 +250,25 @@ call :find_command "git" "FOUND_GIT_PATH"
 if not errorlevel 1 (
     if "%INSTALL_EXIT%"=="0" (
         call :record_component "Winget.Git"
-        if "%VERBOSE%"=="1" echo [%ESC%[38;5;114mINSTALLED%ESC%[0m] Git: %FOUND_GIT_PATH%
+        if "%VERBOSE%"=="1" echo   %FOUND_GIT_PATH%
     )
     exit /b 0
 )
 if not "%INSTALL_EXIT%"=="0" (
     echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for Git.
-    if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
+    echo Log: %TEMP%\cp_setup_winget.log
     exit /b 1
 )
 echo [%ESC%[31mFAILED%ESC%[0m] Git was not found after winget install.
-if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
+echo Log: %TEMP%\cp_setup_winget.log
 exit /b 1
 
 :need_or_install
 call :search_command "%~3" "where.exe %~1" "FOUND_TOOL_PATH"
-if not errorlevel 1 exit /b 0
+if not errorlevel 1 (
+    if not "%~5"=="" set "%~5=%FOUND_TOOL_PATH%"
+    exit /b 0
+)
 
 if "%CHECK_ONLY%"=="1" (
     call :print_missing "%~3"
@@ -280,13 +278,8 @@ if "%CHECK_ONLY%"=="1" (
 call :require_winget
 if errorlevel 1 exit /b 1
 
-if "%VERBOSE%"=="1" (
-    echo [%ESC%[38;5;153mINSTALLING%ESC%[0m] %~3 via winget: %~2
-    "%WINGET%" install --id %~2 %WINGET_ARGS%
-) else (
-    set "INSTALL_CMD=!WINGET! install --id %~2 %WINGET_QUIET_ARGS%"
-    call :run_install_spinner "%~3 via winget: %~2" "" "%TEMP%\cp_setup_winget.log"
-)
+set "INSTALL_CMD=!WINGET! install --id %~2 %WINGET_QUIET_ARGS%"
+call :run_install_spinner "%~3 via winget: %~2" "" "%TEMP%\cp_setup_winget.log"
 set "INSTALL_EXIT=%ERRORLEVEL%"
 call :install_paths
 if errorlevel 1 exit /b 1
@@ -295,17 +288,18 @@ call :find_command "%~1" "FOUND_TOOL_PATH"
 if not errorlevel 1 (
     if "%INSTALL_EXIT%"=="0" (
         call :record_component "%~4"
-        if "%VERBOSE%"=="1" echo [%ESC%[38;5;114mINSTALLED%ESC%[0m] %~3: %FOUND_TOOL_PATH%
+        if "%VERBOSE%"=="1" echo   %FOUND_TOOL_PATH%
     )
+    if not "%~5"=="" set "%~5=%FOUND_TOOL_PATH%"
     exit /b 0
 )
 if not "%INSTALL_EXIT%"=="0" (
     echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for %~3.
-    if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
+    echo Log: %TEMP%\cp_setup_winget.log
     exit /b 1
 )
 echo [%ESC%[31mFAILED%ESC%[0m] %~3 was not found after winget install.
-if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
+echo Log: %TEMP%\cp_setup_winget.log
 exit /b 1
 
 :print_found
@@ -417,10 +411,9 @@ if not exist "%ROOT%\.gitmodules" exit /b 0
 set "INSTALL_CMD=git -C "%ROOT%" submodule update --init --remote libraries/ac-library"
 call :run_install_spinner "ac-library submodule" "" "%TEMP%\cp_setup_git.log"
 set "AC_LIBRARY_EXIT=!ERRORLEVEL!"
-if "%VERBOSE%"=="1" if exist "%TEMP%\cp_setup_git.log" type "%TEMP%\cp_setup_git.log"
 if not "!AC_LIBRARY_EXIT!"=="0" (
     echo [%ESC%[31mFAILED%ESC%[0m] ac-library submodule update failed.
-    if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_git.log
+    echo Log: %TEMP%\cp_setup_git.log
     exit /b 1
 )
 exit /b 0
@@ -479,39 +472,28 @@ call :require_winget
 if errorlevel 1 exit /b 1
 call :find_msys2_shell
 if errorlevel 1 (
-    if "%VERBOSE%"=="1" (
-        echo [%ESC%[38;5;153mINSTALLING%ESC%[0m] MSYS2 via winget: MSYS2.MSYS2
-        "%WINGET%" install --id MSYS2.MSYS2 %WINGET_ARGS%
-    ) else (
-        set "INSTALL_CMD=!WINGET! install --id MSYS2.MSYS2 %WINGET_QUIET_ARGS%"
-        call :run_install_spinner "MSYS2 via winget: MSYS2.MSYS2" "" "%TEMP%\cp_setup_winget.log"
-    )
+    set "INSTALL_CMD=!WINGET! install --id MSYS2.MSYS2 %WINGET_QUIET_ARGS%"
+    call :run_install_spinner "MSYS2 via winget: MSYS2.MSYS2" "" "%TEMP%\cp_setup_winget.log"
     set "INSTALL_EXIT=%ERRORLEVEL%"
     call :find_msys2_shell quiet
     if errorlevel 1 (
         echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for MSYS2.
-        if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_winget.log
+        echo Log: %TEMP%\cp_setup_winget.log
         exit /b 1
     )
     if "%INSTALL_EXIT%"=="0" (
         call :record_component "Winget.MSYS2"
-        if "%VERBOSE%"=="1" echo [%ESC%[38;5;114mINSTALLED%ESC%[0m] MSYS2: %MSYS2_SHELL%
+        if "%VERBOSE%"=="1" echo   %MSYS2_SHELL%
     )
 )
-if "%VERBOSE%"=="1" (
-    echo [%ESC%[38;5;153mINSTALLING%ESC%[0m] MSYS2 toolchain via pacman
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $shell=@('C:\msys64\msys2_shell.cmd','D:\software\programming\msys2\msys2_shell.cmd') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1; if (-not $shell) { $cmd=Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell=$cmd.Source } }; if (-not $shell) { throw 'Could not find msys2_shell.cmd after installing MSYS2.' }; $bash=Join-Path (Split-Path -Parent $shell) 'usr\bin\bash.exe'; if (-not (Test-Path -LiteralPath $bash)) { throw 'Could not find MSYS2 bash.exe after installing MSYS2.' }; $env:MSYSTEM='MINGW64'; $env:CHERE_INVOKING='enabled_from_arguments'; & $bash -lc 'pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python'; if ($LASTEXITCODE -ne 0) { throw 'pacman toolchain install failed.' }"
-) else (
-    set "PACMAN_COMMAND=pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python"
-    call :run_pacman_spinner "INSTALLING" "INSTALLED"
-)
+set "PACMAN_COMMAND=pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python"
+call :run_pacman_spinner "INSTALLING" "INSTALLED"
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] pacman toolchain install failed.
-    if not "%VERBOSE%"=="1" echo Log: %TEMP%\cp_setup_pacman.log
+    echo Log: %TEMP%\cp_setup_pacman.log
     exit /b 1
 )
 call :record_component "Pacman.Toolchain"
-if "%VERBOSE%"=="1" echo [%ESC%[38;5;114mINSTALLED%ESC%[0m] MSYS2 toolchain via pacman
 exit /b %ERRORLEVEL%
 
 :run_pacman_spinner
@@ -676,24 +658,19 @@ if defined CP_GPP (
 exit /b 1
 
 :verify
-call :refresh_path
-call :find_gpp
-if errorlevel 1 (
+if not defined CP_GPP (
     echo [%ESC%[31mFAILED%ESC%[0m] g++ is not visible during verification.
     exit /b 1
 )
-call :search_command "Neovim" "where.exe nvim" "FOUND_NVIM_PATH"
-if errorlevel 1 (
+if not defined FOUND_NVIM_PATH (
     echo [%ESC%[31mFAILED%ESC%[0m] nvim is not visible during verification.
     exit /b 1
 )
-call :find_python
 if not defined CP_PYTHON (
     echo [%ESC%[31mFAILED%ESC%[0m] Python is not visible during verification.
     exit /b 1
 )
-call :search_command "JDK" "where.exe javac" "FOUND_JAVAC_PATH"
-if errorlevel 1 (
+if not defined FOUND_JAVAC_PATH (
     echo [%ESC%[31mFAILED%ESC%[0m] javac is not visible during verification.
     exit /b 1
 )
