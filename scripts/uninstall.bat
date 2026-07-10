@@ -219,10 +219,11 @@ if errorlevel 1 (
     goto maybe_pacman
 )
 
+call :remove_pacman_toolchain_if_present
+if errorlevel 1 exit /b 1
 call :uninstall_msys2
 if errorlevel 1 exit /b 1
 call :clear_state "Winget.MSYS2"
-call :clear_state "Pacman.Toolchain"
 echo.
 exit /b 0
 
@@ -258,10 +259,11 @@ if not errorlevel 1 (
         call :clear_state "Winget.MSYS2"
         call :clear_state "Pacman.Toolchain"
     ) else (
+        call :remove_pacman_toolchain_if_present
+        if errorlevel 1 exit /b 1
         call :uninstall_msys2
         if errorlevel 1 exit /b 1
         call :clear_state "Winget.MSYS2"
-        call :clear_state "Pacman.Toolchain"
     )
     exit /b 0
 )
@@ -301,7 +303,7 @@ if errorlevel 1 (
 if "%ALL_MODE%"=="0" (
     set "UNINSTALL_PROMPT=%~5"
     if not defined UNINSTALL_PROMPT set "UNINSTALL_PROMPT=%~1"
-    call :ask_yes_no "Uninstall %UNINSTALL_PROMPT%"
+    call :ask_yes_no "Uninstall !UNINSTALL_PROMPT!"
     if errorlevel 1 (
         echo [%ESC%[38;5;244mKEPT%ESC%[0m] %~1
         set "CAN_REMOVE_REPO=0"
@@ -371,10 +373,13 @@ for %%I in ("%MSYS2_SHELL%") do set "MSYS2_ROOT=%%~dpI"
 if exist "%MSYS2_ROOT%uninstall.exe" (
     set "UNINSTALL_CMD="%MSYS2_ROOT%uninstall.exe" purge --confirm-command"
     call :run_command_spinner "MSYS2" "" "%TEMP%\cp_setup_msys2_uninstall.log" "UNINSTALLING" "UNINSTALLED"
-    if not errorlevel 1 exit /b 0
-    echo [%ESC%[31mFAILED%ESC%[0m] MSYS2 native uninstall failed.
-    echo Log: %TEMP%\cp_setup_msys2_uninstall.log
-    exit /b 1
+    if errorlevel 1 (
+        echo [%ESC%[31mFAILED%ESC%[0m] MSYS2 native uninstall failed.
+        echo Log: %TEMP%\cp_setup_msys2_uninstall.log
+        exit /b 1
+    )
+    call :verify_msys2_removed
+    exit /b !ERRORLEVEL!
 )
 call :winget_has_package "MSYS2.MSYS2"
 if errorlevel 1 (
@@ -382,7 +387,23 @@ if errorlevel 1 (
     exit /b 1
 )
 call :uninstall_winget_now "MSYS2" "MSYS2.MSYS2"
+if errorlevel 1 exit /b 1
+call :verify_msys2_removed
 exit /b %ERRORLEVEL%
+
+:verify_msys2_removed
+if exist "%MSYS2_ROOT%msys2_shell.cmd" (
+    echo [%ESC%[31mFAILED%ESC%[0m] MSYS2 files remain at %MSYS2_ROOT%
+    exit /b 1
+)
+call :require_winget
+if errorlevel 1 exit /b 1
+call :winget_has_package "MSYS2.MSYS2"
+if not errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] MSYS2 remains registered with winget.
+    exit /b 1
+)
+exit /b 0
 
 :uninstall_pacman_toolchain
 if "%ALL_MODE%"=="0" (
@@ -394,6 +415,17 @@ if "%ALL_MODE%"=="0" (
         exit /b 0
     )
 )
+
+call :remove_pacman_toolchain_now
+exit /b %ERRORLEVEL%
+
+:remove_pacman_toolchain_if_present
+call :has_pacman_toolchain
+if errorlevel 1 exit /b 0
+call :remove_pacman_toolchain_now
+exit /b %ERRORLEVEL%
+
+:remove_pacman_toolchain_now
 
 call :find_msys2_shell
 if errorlevel 1 (
