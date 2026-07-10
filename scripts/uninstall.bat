@@ -176,20 +176,13 @@ if errorlevel 1 exit /b 1
 call :find_msys2_shell
 if errorlevel 1 exit /b 0
 
-call :winget_has_package "MSYS2.MSYS2"
-if errorlevel 1 (
-    echo [%ESC%[38;5;244mKEPT%ESC%[0m] MSYS2 is not registered with winget.
-    echo.
-    goto maybe_pacman
-)
-
 call :ask_yes_no "Uninstall MSYS2 and its CP toolchain"
 if errorlevel 1 (
     echo.
     goto maybe_pacman
 )
 
-call :uninstall_winget_now "MSYS2" "MSYS2.MSYS2"
+call :uninstall_msys2
 if errorlevel 1 exit /b 1
 call :clear_state "Winget.MSYS2"
 call :clear_state "Pacman.Toolchain"
@@ -242,6 +235,24 @@ echo [%ESC%[31mFAILED%ESC%[0m] winget uninstall failed for %~1.
 echo Log: %TEMP%\cp_setup_winget_uninstall.log
 exit /b 1
 
+:uninstall_msys2
+for %%I in ("%MSYS2_SHELL%") do set "MSYS2_ROOT=%%~dpI"
+if exist "%MSYS2_ROOT%uninstall.exe" (
+    set "UNINSTALL_CMD="%MSYS2_ROOT%uninstall.exe" purge --confirm-command"
+    call :run_command_spinner "MSYS2" "" "%TEMP%\cp_setup_msys2_uninstall.log" "UNINSTALLING" "UNINSTALLED"
+    if not errorlevel 1 exit /b 0
+    echo [%ESC%[31mFAILED%ESC%[0m] MSYS2 native uninstall failed.
+    echo Log: %TEMP%\cp_setup_msys2_uninstall.log
+    exit /b 1
+)
+call :winget_has_package "MSYS2.MSYS2"
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] MSYS2 has no native uninstaller and is not registered with winget.
+    exit /b 1
+)
+call :uninstall_winget_now "MSYS2" "MSYS2.MSYS2"
+exit /b %ERRORLEVEL%
+
 :uninstall_pacman_toolchain
 call :ask_yes_no "Remove the CP toolchain from MSYS2"
 if errorlevel 1 (
@@ -290,7 +301,7 @@ exit /b %ERRORLEVEL%
 setlocal EnableExtensions EnableDelayedExpansion
 :ask_yes_no_again
 set "ANSWER="
-set /p "ANSWER=%~1 [Y/N]: "
+set /p "ANSWER=%~1? [Y/N]: "
 for %%A in (y ye yes yeah) do if /I "!ANSWER!"=="%%A" (
     endlocal
     exit /b 0
