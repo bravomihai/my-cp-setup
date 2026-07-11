@@ -29,6 +29,13 @@ vim.api.nvim_create_autocmd("BufLeave", {
     end,
 })
 
+vim.api.nvim_create_autocmd("FileType", {
+    pattern = { "c", "cpp", "java", "python" },
+    callback = function(event)
+        vim.bo[event.buf].wrap = false
+    end,
+})
+
 vim.diagnostic.config({
     virtual_text = true,
     float = { border = "rounded" },

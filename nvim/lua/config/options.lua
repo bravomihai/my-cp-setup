@@ -16,3 +16,6 @@ vim.opt.listchars = {
 }
 
 vim.opt.cursorline = true
+vim.opt.undofile = true
+vim.opt.scrolloff = 8
+vim.opt.signcolumn = "yes"

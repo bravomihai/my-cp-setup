@@ -5,6 +5,10 @@ import java.util.*;
 
 public final class Cp {
     public static final boolean DEBUG = true;
+    public static final long MOD_CONST = 998_244_353L;
+    public static final long INF = Long.MAX_VALUE;
+    public static final int NR1E5 = 100_000;
+    public static final int NR1E9 = 1_000_000_000;
     public static final FastScanner fs = new FastScanner(System.in);
     private static final StringBuilder out = new StringBuilder();
 
@@ -22,9 +26,57 @@ public final class Cp {
         out.append(x).append('\n');
     }
 
+    public static void yn(boolean value) {
+        println(value ? "Yes" : "No");
+    }
+
     public static void flush() {
         System.out.print(out);
         out.setLength(0);
+    }
+
+    public static void printArray(int[] values) {
+        for (int i = 0; i < values.length; i++) {
+            if (i > 0) out.append(' ');
+            out.append(values[i]);
+        }
+    }
+
+    public static void printlnArray(int[] values) {
+        printArray(values);
+        println();
+    }
+
+    public static void printArray(long[] values) {
+        for (int i = 0; i < values.length; i++) {
+            if (i > 0) out.append(' ');
+            out.append(values[i]);
+        }
+    }
+
+    public static void printlnArray(long[] values) {
+        printArray(values);
+        println();
+    }
+
+    public static int min3(int a, int b, int c) {
+        return Math.min(Math.min(a, b), c);
+    }
+
+    public static int max3(int a, int b, int c) {
+        return Math.max(Math.max(a, b), c);
+    }
+
+    public static long min3(long a, long b, long c) {
+        return Math.min(Math.min(a, b), c);
+    }
+
+    public static long max3(long a, long b, long c) {
+        return Math.max(Math.max(a, b), c);
+    }
+
+    public static boolean inside(int x, int y, int height, int width) {
+        return 0 <= x && x < height && 0 <= y && y < width;
     }
 
     public static void err(Object... values) {
@@ -119,6 +171,28 @@ public final class Cp {
 
         public double nextDouble() throws IOException {
             return Double.parseDouble(next());
+        }
+
+        public int[] nextIntArray(int n) throws IOException {
+            int[] values = new int[n];
+            for (int i = 0; i < n; i++) values[i] = nextInt();
+            return values;
+        }
+
+        public long[] nextLongArray(int n) throws IOException {
+            long[] values = new long[n];
+            for (int i = 0; i < n; i++) values[i] = nextLong();
+            return values;
+        }
+
+        public int[][] nextIntMatrix(int rows, int columns) throws IOException {
+            int[][] values = new int[rows][columns];
+            for (int row = 0; row < rows; row++) {
+                for (int column = 0; column < columns; column++) {
+                    values[row][column] = nextInt();
+                }
+            }
+            return values;
         }
     }
 }

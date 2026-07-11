@@ -1,6 +1,6 @@
 # my-cp-setup
 
-Personal competitive programming setup for Windows 11, with C++, Java, Python, Neovim, DOSKEY macros, and AtCoder Library expansion.
+Personal Windows 11 competitive-programming setup for C++, Java, and Python with Neovim, managed Git/JDK/MSYS2 tooling, templates, build/run scripts, CMD macros, and standalone submission expansion for all three languages, including AtCoder Library support for C++.
 
 ## Quick Install
 
@@ -121,7 +121,15 @@ Examples:
 "%CP_PYTHON%" scripts\run.py template\python\solve.py
 ```
 
-From Neovim, `<leader>r` calls `scripts\run.py --new-cmd` and opens the result in a new `cmd.exe` window.
+From Neovim, `<leader>r` calls `scripts\run.py --new-cmd` and opens the result in a new `cmd.exe` window. The CP-specific mappings are:
+
+| Mapping | Action |
+| --- | --- |
+| `<leader>r` | Save and compile/run the current C++, Java, or Python file in a new `cmd.exe` window |
+| `<leader>i` | Create or open `debug\input.txt` next to the current source file |
+| `<leader>e` | Expand the current file and copy `submit.<ext>` to the clipboard |
+| `<leader>E` | Expand the current file, then open `submit.<ext>` |
+| `<leader>d` | Toggle diagnostics for the current buffer |
 
 ## Expand
 
@@ -135,6 +143,24 @@ Generate a standalone submit file and copy it to the clipboard:
 
 On success it reports the generated target file; on failure it prints an `EXPAND FAILED` message.
 
+## Java And Python Helpers
+
+`libraries\java\my_libraries\Cp.java` is injected into `submit.java`, while `libraries\python\my_libraries\cp.py` is injected into `submit.py`. They mirror the small convenience layer from C++—debug output, constants, I/O, output, and basic helpers—while larger data structures and algorithms stay outside these files.
+
+Java helpers:
+
+- `Cp.fs.nextIntArray(n)`, `Cp.fs.nextLongArray(n)`, and `Cp.fs.nextIntMatrix(rows, columns)`
+- `Cp.printArray(...)` and `Cp.printlnArray(...)` for `int[]` and `long[]`
+- `Cp.DEBUG`, `Cp.out(...)`, `Cp.Timer`, `Cp.MOD_CONST`, `Cp.INF`, `Cp.NR1E5`, and `Cp.NR1E9`
+- `Cp.yn(...)`, `Cp.min3(...)`, `Cp.max3(...)`, and `Cp.inside(...)`
+
+Python helpers:
+
+- `nints(n)`, `ntokens(n)`, and `read_grid(n)` for token-based input
+- `print_iter(values)` for space-separated buffered output
+- `DEBUG`, `out(...)`, `Timer`, `MOD_CONST`, `INF`, `NR1E5`, and `NR1E9`
+- `yn(...)`, `min3(...)`, `max3(...)`, and `inside(...)`
+
 ## Uninstall
 
 When configuration cleanup is selected, `scripts\uninstall.bat` removes:
@@ -145,7 +171,7 @@ When configuration cleanup is selected, `scripts\uninstall.bat` removes:
 
 For a normal uninstall, it requests administrator rights once at startup, then asks before removing Git, Neovim, JDK, MSYS2, or the CP toolchain only when that component was recorded as installed by this setup. Detected pre-existing components are reported as `KEPT` without blocking repository-folder removal. Choosing Neovim removes only its local `nvim-data` directory (LazyVim, Mason, and downloaded plugins); this setup's tracked `nvim` configuration remains in the repository. If MSYS2 is kept and the CP toolchain was recorded as setup-managed, it separately asks whether to remove that toolchain. Components that are no longer registered with winget are kept and their stale setup records are cleared. The repository-folder prompt appears only when every offered removal and configuration cleanup was accepted.
 
-`--all` removes setup-managed external components and configuration automatically, reports detected pre-existing components as `KEPT`, clears stale records without stopping the remaining cleanup, then asks whether to remove the repository folder. Each prompt displays `[Y/N]`; it accepts `y`, `ye`, `yes`, or `yeah` to confirm; `n`, `no`, or `nah` to decline, in any letter case.
+`--all` removes setup-managed external components and configuration automatically, reports detected pre-existing components as `KEPT`, clears stale records without stopping the remaining cleanup, then asks whether to remove the repository folder. Each prompt displays `[Y/N]`; it accepts `y`, `ye`, `yes`, or `yeah` to confirm; `n`, `no`, or `nah` to decline, in any letter case. If the repository folder is still in use by File Explorer, a terminal, an editor, or another app, close it and run the uninstaller again.
 
 Preview the uninstall state without running cleanup:
 
@@ -167,7 +193,9 @@ The installer sets `XDG_CONFIG_HOME` to the repository root, so Neovim loads `<r
 XDG_CONFIG_HOME=C:\Users\mihai\my-cp-setup
 ```
 
-## Language Server
+The bundled LazyVim configuration keeps persistent undo, a stable sign column, an 8-line scroll offset, and disables soft wrapping for C, C++, Java, and Python buffers. The CP-specific mappings are listed in [Build And Run](#build-and-run).
+
+## C++ Language Server
 
 `.clangd` contains the C++ flags used by clangd:
 
