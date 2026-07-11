@@ -68,15 +68,29 @@ if "%ALL_MODE%"=="0" (
 )
 
 echo.
-echo [%ESC%[38;5;183mCHECKING%ESC%[0m] CP setup configuration
+<nul set /p "=[%ESC%[38;5;183mCHECKING%ESC%[0m] CP setup configuration"
+call :has_setup_configuration
+set "CONFIG_FOUND=1"
+if errorlevel 2 goto configuration_failed
+if errorlevel 1 set "CONFIG_FOUND=0"
+if "%CONFIG_FOUND%"=="1" call :replace_configuration_status "REMOVING" "38;5;153"
+set "CONFIG_REMOVAL_ACTIVE=1"
 call :remove_path_entries
-if errorlevel 1 goto failed
+if errorlevel 1 goto configuration_failed
 
 call :remove_env_vars
-if errorlevel 1 goto failed
+if errorlevel 1 goto configuration_failed
 
 call :remove_cmd_macros
-if errorlevel 1 goto failed
+if errorlevel 1 goto configuration_failed
+
+set "CONFIG_REMOVAL_ACTIVE="
+if "%CONFIG_FOUND%"=="1" (
+    call :replace_configuration_status "REMOVED" "38;5;114"
+) else (
+    call :replace_configuration_status "MISSING" "33"
+)
+echo.
 
 call :clear_empty_state
 set "CONFIG_REMOVED=1"
@@ -107,6 +121,21 @@ echo.
 call :print_completion
 echo [%ESC%[38;5;244mKEPT%ESC%[0m] CP setup folder because setup components or configuration were kept.
 echo Restart terminals so environment changes are visible everywhere.
+exit /b 0
+
+:configuration_failed
+set "CONFIG_REMOVAL_ACTIVE="
+echo.
+goto failed
+
+:has_setup_configuration
+set "CONFIG_ROOT=%ROOT%"
+set "MACROS=%ROOT%\scripts\cp_macros"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; try { $root=$env:CONFIG_ROOT; $macros=$env:MACROS; $command='doskey /macrofile=\"'+$macros+'\"'; $key='HKCU:\Software\my-cp-setup'; $owned=@((Get-ItemProperty -Path $key -Name 'Path.Entries' -ErrorAction SilentlyContinue).'Path.Entries' | Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\') }); $path=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $path) { $path='' }; $parts=@($path -split ';' | ForEach-Object { $_.Trim().TrimEnd('\') } | Where-Object { $_ }); $hasPath=@($parts | Where-Object { $owned -icontains $_ }).Count -gt 0; $hasEnvironment=$false; foreach ($name in @('XDG_CONFIG_HOME','CP_SETUP_ROOT')) { $value=[Environment]::GetEnvironmentVariable($name,'User'); if ($value -and $value.TrimEnd('\') -ieq $root.TrimEnd('\')) { $hasEnvironment=$true; break } }; if (-not $hasEnvironment) { foreach ($name in @('CP_PYTHON','CP_GPP')) { $value=[Environment]::GetEnvironmentVariable($name,'User'); if ($value -and ($value.StartsWith('C:\msys64',[StringComparison]::OrdinalIgnoreCase) -or $value.StartsWith('D:\software\programming\msys2',[StringComparison]::OrdinalIgnoreCase))) { $hasEnvironment=$true; break } } }; $autorun=(Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Command Processor' -Name AutoRun -ErrorAction SilentlyContinue).AutoRun; $hasMacros=$autorun -and $autorun.IndexOf($command,[StringComparison]::OrdinalIgnoreCase) -ge 0; if ($hasPath -or $hasEnvironment -or $hasMacros) { exit 0 }; exit 1 } catch { exit 2 }"
+exit /b %ERRORLEVEL%
+
+:replace_configuration_status
+<nul set /p "=%ESC%[2K%ESC%[1G[%ESC%[%~2m%~1%ESC%[0m] CP setup configuration"
 exit /b 0
 
 :print_completion
@@ -217,16 +246,16 @@ for %%V in (Winget.Git Winget.Neovim Winget.JDK Winget.MSYS2 Pacman.Toolchain) d
 exit /b 0
 
 :remove_path_entries
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$key='HKCU:\Software\my-cp-setup'; $esc=[char]27; $removed='['+$esc+'[38;5;114mREMOVED'+$esc+'[0m]'; $missing='['+$esc+'[33mMISSING'+$esc+'[0m]'; $owned=@((Get-ItemProperty -Path $key -Name 'Path.Entries' -ErrorAction SilentlyContinue).'Path.Entries' | Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\') }); if (-not $owned.Count) { Write-Host ($missing+' User PATH entries managed by setup'); exit 0 }; $path=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $path) { $path='' }; $parts=@($path -split ';' | Where-Object { $_ }); $found=@($parts | Where-Object { $owned -icontains $_.Trim().TrimEnd('\') }); if (-not $found.Count) { Remove-ItemProperty -Path $key -Name 'Path.Entries' -ErrorAction SilentlyContinue; Write-Host ($missing+' User PATH entries managed by setup'); exit 0 }; $kept=@($parts | Where-Object { -not ($owned -icontains $_.Trim().TrimEnd('\')) }); [Environment]::SetEnvironmentVariable('Path',($kept -join ';'),'User'); Remove-ItemProperty -Path $key -Name 'Path.Entries' -ErrorAction SilentlyContinue; Write-Host ($removed+' User PATH entries managed by setup')"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$key='HKCU:\Software\my-cp-setup'; $report=$env:CONFIG_REMOVAL_ACTIVE -ne '1'; $esc=[char]27; $removed='['+$esc+'[38;5;114mREMOVED'+$esc+'[0m]'; $missing='['+$esc+'[33mMISSING'+$esc+'[0m]'; $owned=@((Get-ItemProperty -Path $key -Name 'Path.Entries' -ErrorAction SilentlyContinue).'Path.Entries' | Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\') }); if (-not $owned.Count) { if ($report) { Write-Host ($missing+' User PATH entries managed by setup') }; exit 0 }; $path=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $path) { $path='' }; $parts=@($path -split ';' | Where-Object { $_ }); $found=@($parts | Where-Object { $owned -icontains $_.Trim().TrimEnd('\') }); if (-not $found.Count) { Remove-ItemProperty -Path $key -Name 'Path.Entries' -ErrorAction SilentlyContinue; if ($report) { Write-Host ($missing+' User PATH entries managed by setup') }; exit 0 }; $kept=@($parts | Where-Object { -not ($owned -icontains $_.Trim().TrimEnd('\')) }); [Environment]::SetEnvironmentVariable('Path',($kept -join ';'),'User'); Remove-ItemProperty -Path $key -Name 'Path.Entries' -ErrorAction SilentlyContinue; if ($report) { Write-Host ($removed+' User PATH entries managed by setup') }"
 exit /b %ERRORLEVEL%
 
 :remove_env_vars
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $esc=[char]27; $removed='['+$esc+'[38;5;114mREMOVED'+$esc+'[0m]'; $exact=@{XDG_CONFIG_HOME=$root; CP_SETUP_ROOT=$root}; foreach ($name in $exact.Keys) { $v=[Environment]::GetEnvironmentVariable($name,'User'); if ($v -and $v.TrimEnd('\') -ieq $exact[$name].TrimEnd('\')) { [Environment]::SetEnvironmentVariable($name,$null,'User'); Write-Host ($removed+' '+$name) } }; $bases=@('C:\msys64','D:\software\programming\msys2'); foreach ($name in @('CP_PYTHON','CP_GPP')) { $v=[Environment]::GetEnvironmentVariable($name,'User'); if (-not $v) { continue }; foreach ($base in $bases) { if ($v.StartsWith($base,[StringComparison]::OrdinalIgnoreCase)) { [Environment]::SetEnvironmentVariable($name,$null,'User'); Write-Host ($removed+' '+$name); break } } }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $report=$env:CONFIG_REMOVAL_ACTIVE -ne '1'; $esc=[char]27; $removed='['+$esc+'[38;5;114mREMOVED'+$esc+'[0m]'; $exact=@{XDG_CONFIG_HOME=$root; CP_SETUP_ROOT=$root}; foreach ($name in $exact.Keys) { $v=[Environment]::GetEnvironmentVariable($name,'User'); if ($v -and $v.TrimEnd('\') -ieq $exact[$name].TrimEnd('\')) { [Environment]::SetEnvironmentVariable($name,$null,'User'); if ($report) { Write-Host ($removed+' '+$name) } } }; $bases=@('C:\msys64','D:\software\programming\msys2'); foreach ($name in @('CP_PYTHON','CP_GPP')) { $v=[Environment]::GetEnvironmentVariable($name,'User'); if (-not $v) { continue }; foreach ($base in $bases) { if ($v.StartsWith($base,[StringComparison]::OrdinalIgnoreCase)) { [Environment]::SetEnvironmentVariable($name,$null,'User'); if ($report) { Write-Host ($removed+' '+$name) }; break } } }"
 exit /b %ERRORLEVEL%
 
 :remove_cmd_macros
 set "MACROS=%ROOT%\scripts\cp_macros"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$macros=$env:MACROS; $esc=[char]27; $removed='['+$esc+'[38;5;114mREMOVED'+$esc+'[0m]'; $key='HKCU:\Software\Microsoft\Command Processor'; $command='doskey /macrofile=\"'+$macros+'\"'; $autorun=(Get-ItemProperty -Path $key -Name AutoRun -ErrorAction SilentlyContinue).AutoRun; if ($autorun -and $autorun.IndexOf($command,[StringComparison]::OrdinalIgnoreCase) -ge 0) { $pattern='(?i)(?:^\s*|\s*&\s*)'+[regex]::Escape($command)+'(?=\s*(?:&|$))'; $updated=[regex]::Replace($autorun,$pattern,'').Trim(); $updated=[regex]::Replace($updated,'^\s*&\s*',''); $updated=[regex]::Replace($updated,'\s*&\s*$',''); if ($updated) { Set-ItemProperty -Path $key -Name AutoRun -Value $updated } else { Remove-ItemProperty -Path $key -Name AutoRun -ErrorAction Stop }; Write-Host ($removed+' CMD AutoRun cp_macros') }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$macros=$env:MACROS; $report=$env:CONFIG_REMOVAL_ACTIVE -ne '1'; $esc=[char]27; $removed='['+$esc+'[38;5;114mREMOVED'+$esc+'[0m]'; $key='HKCU:\Software\Microsoft\Command Processor'; $command='doskey /macrofile=\"'+$macros+'\"'; $autorun=(Get-ItemProperty -Path $key -Name AutoRun -ErrorAction SilentlyContinue).AutoRun; if ($autorun -and $autorun.IndexOf($command,[StringComparison]::OrdinalIgnoreCase) -ge 0) { $pattern='(?i)(?:^\s*|\s*&\s*)'+[regex]::Escape($command)+'(?=\s*(?:&|$))'; $updated=[regex]::Replace($autorun,$pattern,'').Trim(); $updated=[regex]::Replace($updated,'^\s*&\s*',''); $updated=[regex]::Replace($updated,'\s*&\s*$',''); if ($updated) { Set-ItemProperty -Path $key -Name AutoRun -Value $updated } else { Remove-ItemProperty -Path $key -Name AutoRun -ErrorAction Stop }; if ($report) { Write-Host ($removed+' CMD AutoRun cp_macros') } }"
 exit /b %ERRORLEVEL%
 
 :remove_external_components
