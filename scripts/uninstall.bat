@@ -8,6 +8,7 @@ set "ORIGINAL_ARGS=%*"
 set "CHECK_ONLY=0"
 set "ALL_MODE=0"
 set "CAN_REMOVE_REPO=1"
+set "CONFIG_REMOVED=0"
 set "STATE_KEY=HKCU\Software\my-cp-setup"
 
 :parse_args
@@ -78,6 +79,7 @@ call :remove_cmd_macros
 if errorlevel 1 goto failed
 
 call :clear_empty_state
+set "CONFIG_REMOVED=1"
 
 :decide_repo_removal
 if "%ALL_MODE%"=="0" if not "%CAN_REMOVE_REPO%"=="1" goto repo_kept
@@ -88,21 +90,33 @@ if not errorlevel 1 (
     reg delete "%STATE_KEY%" /f >nul 2>nul
     call :schedule_repo_removal
     if errorlevel 1 goto failed
+    call :print_completion
     echo [%ESC%[38;5;153mREMOVING%ESC%[0m] CP setup folder shortly.
     echo Restart terminals so environment changes are visible everywhere.
     exit /b 0
 )
 
 echo.
-echo [%ESC%[32mDONE%ESC%[0m] CP setup configuration removed.
-echo External components you kept remain installed.
+call :print_completion
+echo [%ESC%[38;5;244mKEPT%ESC%[0m] CP setup folder.
 echo Restart terminals so environment changes are visible everywhere.
 exit /b 0
 
 :repo_kept
 echo.
+call :print_completion
 echo [%ESC%[38;5;244mKEPT%ESC%[0m] CP setup folder because setup components or configuration were kept.
 echo Restart terminals so environment changes are visible everywhere.
+exit /b 0
+
+:print_completion
+if not "%CONFIG_REMOVED%"=="1" exit /b 0
+if "%ALL_MODE%"=="1" (
+    echo [%ESC%[32mDONE%ESC%[0m] All setup-managed components and configuration were removed.
+) else (
+    echo [%ESC%[32mDONE%ESC%[0m] CP setup configuration removed.
+    echo External components you kept remain installed.
+)
 exit /b 0
 
 :enable_ansi
@@ -240,8 +254,10 @@ if errorlevel 1 (
 )
 call :find_msys2_shell
 if errorlevel 1 (
+    call :print_missing "MSYS2"
     call :clear_state "Winget.MSYS2"
     call :clear_state "Pacman.Toolchain"
+    echo.
     exit /b 0
 )
 
@@ -265,7 +281,9 @@ call :state_has "Pacman.Toolchain"
 if errorlevel 1 exit /b 0
 call :has_pacman_toolchain
 if errorlevel 1 (
+    call :print_missing "MSYS2 CP toolchain"
     call :clear_state "Pacman.Toolchain"
+    echo.
     exit /b 0
 )
 call :uninstall_pacman_toolchain
@@ -300,8 +318,10 @@ call :state_has "Winget.MSYS2"
 if not errorlevel 1 (
     call :find_msys2_shell
     if errorlevel 1 (
+        call :print_missing "MSYS2"
         call :clear_state "Winget.MSYS2"
         call :clear_state "Pacman.Toolchain"
+        echo.
     ) else (
         call :remove_pacman_toolchain_if_present
         if errorlevel 1 exit /b 1
@@ -318,7 +338,9 @@ call :state_has "Pacman.Toolchain"
 if not errorlevel 1 (
     call :find_msys2_shell
     if errorlevel 1 (
+        call :print_missing "MSYS2 CP toolchain"
         call :clear_state "Pacman.Toolchain"
+        echo.
     ) else (
         call :uninstall_pacman_toolchain
         if errorlevel 1 exit /b 1
@@ -335,8 +357,10 @@ exit /b 0
 :uninstall_winget_component
 call :search_command "%~1" "where.exe %~3" "FOUND_COMPONENT_PATH"
 if errorlevel 1 (
+    call :print_missing "%~1"
     call :clear_state "%~4"
     if "%ALL_MODE%"=="1" if /I "%~4"=="Winget.Neovim" call :remove_nvim_generated_data
+    echo.
     exit /b 0
 )
 
@@ -378,14 +402,22 @@ exit /b 0
 
 :report_unmanaged_command
 call :search_command "%~1" "where.exe %~2" "UNMANAGED_COMPONENT_PATH"
-if errorlevel 1 exit /b 0
+if errorlevel 1 (
+    call :print_missing "%~1"
+    echo.
+    exit /b 0
+)
 echo [%ESC%[38;5;244mKEPT%ESC%[0m] %~1 was not installed by CP setup.
 echo.
 exit /b 0
 
 :report_unmanaged_msys2
 call :find_msys2_shell
-if errorlevel 1 exit /b 0
+if errorlevel 1 (
+    call :print_missing "MSYS2"
+    echo.
+    exit /b 0
+)
 echo [%ESC%[38;5;244mKEPT%ESC%[0m] MSYS2 was not installed by CP setup.
 echo.
 exit /b 0
@@ -393,7 +425,9 @@ exit /b 0
 :uninstall_git
 call :search_command "Git" "where.exe git" "FOUND_GIT_PATH"
 if errorlevel 1 (
+    call :print_missing "Git"
     call :clear_state "Winget.Git"
+    echo.
     exit /b 0
 )
 
@@ -492,7 +526,9 @@ call :state_has "Pacman.Toolchain"
 if errorlevel 1 exit /b 0
 call :has_pacman_toolchain
 if errorlevel 1 (
+    call :print_missing "MSYS2 CP toolchain"
     call :clear_state "Pacman.Toolchain"
+    echo.
     exit /b 0
 )
 call :remove_pacman_toolchain_now
@@ -522,6 +558,10 @@ exit /b %ERRORLEVEL%
 
 :clear_state
 reg delete "%STATE_KEY%" /v "%~1" /f >nul 2>nul
+exit /b 0
+
+:print_missing
+echo [%ESC%[33mMISSING%ESC%[0m] %~1
 exit /b 0
 
 :clear_empty_state
@@ -725,7 +765,7 @@ if defined CP_DELETE_SIGNAL > "%CP_DELETE_SIGNAL%" echo ready
 cd /d "%TEMP%"
 > "%DELETE_CMD%" echo @echo off
 >> "%DELETE_CMD%" echo cd /d "%%TEMP%%"
->> "%DELETE_CMD%" echo powershell -NoProfile -ExecutionPolicy Bypass -Command "$root=[IO.Path]::GetFullPath($env:CP_DELETE_ROOT); $marker=Join-Path $root 'scripts\install.bat'; if ($root -eq [IO.Path]::GetPathRoot($root) -or -not (Test-Path -LiteralPath $marker)) { exit 1 }; $parent=Split-Path -Parent $root; $name=Split-Path -Leaf $root; $staged=$null; for ($i=0; $i -lt 20; $i++) { $candidate=Join-Path $parent ('.'+$name+'.deleting-'+[guid]::NewGuid().ToString('N')); try { Move-Item -LiteralPath $root -Destination $candidate -ErrorAction Stop; $staged=$candidate; break } catch { Start-Sleep -Milliseconds 500 } }; if (-not $staged) { Write-Host '[FAILED] CP setup folder is still in use. Close terminals opened in it, then delete it manually.'; exit 1 }; for ($i=0; $i -lt 20; $i++) { try { Remove-Item -LiteralPath $staged -Recurse -Force -ErrorAction Stop; exit 0 } catch { Start-Sleep -Milliseconds 500 } }; Write-Host ('[FAILED] CP setup cleanup folder remains at '+$staged); exit 1"
+>> "%DELETE_CMD%" echo powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Sleep -Seconds 2; $root=[IO.Path]::GetFullPath($env:CP_DELETE_ROOT); $marker=Join-Path $root 'scripts\install.bat'; if ($root -eq [IO.Path]::GetPathRoot($root) -or -not (Test-Path -LiteralPath $marker)) { exit 1 }; $parent=Split-Path -Parent $root; $name=Split-Path -Leaf $root; $staged=$null; for ($i=0; $i -lt 20; $i++) { $candidate=Join-Path $parent ('.'+$name+'.deleting-'+[guid]::NewGuid().ToString('N')); try { Move-Item -LiteralPath $root -Destination $candidate -ErrorAction Stop; $staged=$candidate; break } catch { Start-Sleep -Milliseconds 500 } }; if (-not $staged) { Write-Host '[FAILED] CP setup folder is still in use. Close terminals opened in it, then delete it manually.'; exit 1 }; for ($i=0; $i -lt 20; $i++) { try { Remove-Item -LiteralPath $staged -Recurse -Force -ErrorAction Stop; exit 0 } catch { Start-Sleep -Milliseconds 500 } }; Write-Host ('[FAILED] CP setup cleanup folder remains at '+$staged); exit 1"
 >> "%DELETE_CMD%" echo set "CP_DELETE_SELF=%%~f0"
 >> "%DELETE_CMD%" echo start "" /b powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Sleep -Milliseconds 500; Remove-Item -LiteralPath $env:CP_DELETE_SELF -Force -ErrorAction SilentlyContinue"
 start "" /b "%ComSpec%" /d /c call "%DELETE_CMD%"
