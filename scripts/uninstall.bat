@@ -919,16 +919,20 @@ cd /d "%TEMP%"
 >> "%DELETE_PS%" echo         try { Move-Item -LiteralPath $root -Destination $candidate -ErrorAction Stop; $staged = $candidate; break } catch { Start-Sleep -Milliseconds 500 }
 >> "%DELETE_PS%" echo     }
 >> "%DELETE_PS%" echo     if ^(-not $staged^) {
->> "%DELETE_PS%" echo         Write-Host '[FAILED] CP setup folder is still in use. Close terminals opened in it, then delete it manually.'
+>> "%DELETE_PS%" echo         Write-Host '[FAILED] CP setup folder is still in use.'
+>> "%DELETE_PS%" echo         Write-Host 'Close File Explorer, terminals, editors, or other apps using it, then run uninstall again.'
 >> "%DELETE_PS%" echo         exit 1
 >> "%DELETE_PS%" echo     }
 >> "%DELETE_PS%" echo     for ^($attempt = 0; $attempt -lt 20; $attempt++^) {
 >> "%DELETE_PS%" echo         try { Remove-Item -LiteralPath $staged -Recurse -Force -ErrorAction Stop; exit 0 } catch { Start-Sleep -Milliseconds 500 }
 >> "%DELETE_PS%" echo     }
->> "%DELETE_PS%" echo     Write-Host ^('[FAILED] CP setup cleanup folder remains at ' + $staged^)
+>> "%DELETE_PS%" echo     Write-Host '[FAILED] CP setup folder could not be fully deleted because it is still in use.'
+>> "%DELETE_PS%" echo     Write-Host 'Close File Explorer, terminals, editors, or other apps using it, then run scripts\uninstall.bat again from:'
+>> "%DELETE_PS%" echo     Write-Host ^('  ' + $staged^)
 >> "%DELETE_PS%" echo     exit 1
 >> "%DELETE_PS%" echo } catch {
 >> "%DELETE_PS%" echo     Write-Host ^('[FAILED] CP setup folder cleanup failed: ' + $_.Exception.Message^)
+>> "%DELETE_PS%" echo     Write-Host 'Close apps that may be using the folder, then run uninstall again.'
 >> "%DELETE_PS%" echo     exit 1
 >> "%DELETE_PS%" echo } finally {
 >> "%DELETE_PS%" echo     Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
