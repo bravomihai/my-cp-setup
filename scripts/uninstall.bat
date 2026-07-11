@@ -9,6 +9,7 @@ set "CHECK_ONLY=0"
 set "ALL_MODE=0"
 set "CAN_REMOVE_REPO=1"
 set "CONFIG_REMOVED=0"
+set "REMOVE_REPO=0"
 set "STATE_KEY=HKCU\Software\my-cp-setup"
 
 :parse_args
@@ -60,64 +61,80 @@ if errorlevel 1 goto failed
 call :has_setup_configuration
 set "CONFIG_STATUS=!ERRORLEVEL!"
 set "CONFIG_FOUND=1"
+set "CONFIG_STATUS_ABOVE=0"
 if "!CONFIG_STATUS!"=="2" goto configuration_failed
 if "!CONFIG_STATUS!"=="1" set "CONFIG_FOUND=0"
 
 if "%ALL_MODE%"=="1" goto configuration_ready
 if "%CONFIG_FOUND%"=="0" goto configuration_ready
+echo.
 call :ask_yes_no "Remove CP setup configuration"
-if not errorlevel 1 goto configuration_ready
-echo [%ESC%[38;5;244mKEPT%ESC%[0m] CP setup configuration
+if errorlevel 1 goto configuration_kept
+set "CONFIG_STATUS_ABOVE=1"
+call :replace_configuration_status_above "REMOVING" "38;5;153"
+goto configuration_remove
+
+:configuration_kept
+call :replace_configuration_status_above "KEPT" "38;5;244"
 set "CAN_REMOVE_REPO=0"
 goto decide_repo_removal
 
 :configuration_ready
-<nul set /p "=[%ESC%[38;5;183mCHECKING%ESC%[0m] CP setup configuration"
 if "%CONFIG_FOUND%"=="1" call :replace_configuration_status "REMOVING" "38;5;153"
+
+:configuration_remove
 call :remove_setup_configuration
 if errorlevel 1 goto configuration_failed
 
-if "%CONFIG_FOUND%"=="1" (
-    call :replace_configuration_status "REMOVED" "38;5;114"
-) else (
-    call :replace_configuration_status "MISSING" "33"
-)
-echo.
+if "%CONFIG_FOUND%"=="0" goto configuration_missing
+if "%CONFIG_STATUS_ABOVE%"=="1" goto configuration_removed_above
+call :replace_configuration_status "REMOVED" "38;5;114"
+goto configuration_finished
 
+:configuration_removed_above
+call :replace_configuration_status_above "REMOVED" "38;5;114"
+goto configuration_finished
+
+:configuration_missing
+call :replace_configuration_status "MISSING" "33"
+
+:configuration_finished
 call :clear_empty_state
 set "CONFIG_REMOVED=1"
+if "%CONFIG_STATUS_ABOVE%"=="1" goto decide_repo_removal
+echo.
 
 :decide_repo_removal
 if "%ALL_MODE%"=="0" if not "%CAN_REMOVE_REPO%"=="1" goto repo_kept
 
 echo.
 call :ask_yes_no "Remove this CP setup folder too"
-if not errorlevel 1 (
-    echo [%ESC%[38;5;153mREMOVING%ESC%[0m] CP setup folder shortly.
-    reg delete "%STATE_KEY%" /f >nul 2>nul
-    call :schedule_repo_removal
-    if errorlevel 1 goto failed
-    echo.
-    call :print_completion
-    echo Restart terminals so environment changes are visible everywhere.
-    exit /b 0
-)
+if errorlevel 1 goto repo_kept_by_choice
+echo [%ESC%[38;5;153mREMOVING%ESC%[0m] CP setup folder after the uninstaller closes.
+reg delete "%STATE_KEY%" /f >nul 2>nul
+set "REMOVE_REPO=1"
+goto finish_uninstall
 
-echo.
-call :print_completion
+:repo_kept_by_choice
 echo [%ESC%[38;5;244mKEPT%ESC%[0m] CP setup folder.
-echo Restart terminals so environment changes are visible everywhere.
-exit /b 0
+goto finish_uninstall
 
 :repo_kept
 echo.
-call :print_completion
 echo [%ESC%[38;5;244mKEPT%ESC%[0m] CP setup folder because setup components or configuration were kept.
+goto finish_uninstall
+
+:finish_uninstall
+echo.
+call :print_completion
 echo Restart terminals so environment changes are visible everywhere.
+call :wait_to_finish
+if "%REMOVE_REPO%"=="0" exit /b 0
+call :schedule_repo_removal
+if errorlevel 1 goto failed
 exit /b 0
 
 :configuration_failed
-echo.
 goto failed
 
 :has_setup_configuration
@@ -156,8 +173,14 @@ set "CONFIG_CHECK_PS=%TEMP%\cp_setup_config_check_%RANDOM%_%RANDOM%.ps1"
 >> "%CONFIG_CHECK_PS%" echo     if ^($hasPath -or $hasRootEnvironment -or $hasMacros -or $hasManagedCpp^) { exit 0 }
 >> "%CONFIG_CHECK_PS%" echo     exit 1
 >> "%CONFIG_CHECK_PS%" echo } catch { exit 2 }
-powershell -NoProfile -ExecutionPolicy Bypass -File "%CONFIG_CHECK_PS%"
+set "CONFIG_CHECKER=%TEMP%\cp_setup_config_check_%RANDOM%_%RANDOM%.cmd"
+> "%CONFIG_CHECKER%" echo @echo off
+>> "%CONFIG_CHECKER%" echo powershell -NoProfile -ExecutionPolicy Bypass -File "%CONFIG_CHECK_PS%"
+>> "%CONFIG_CHECKER%" echo exit /b %%ERRORLEVEL%%
+set "SEARCH_COMMAND_INPUT=call ""%CONFIG_CHECKER%"""
+call :search_command "CP setup configuration" "@env" "CONFIG_CHECK_VALUE" "CHECKING" "CHECKING" "38;5;183" "1"
 set "CONFIG_CHECK_EXIT=!ERRORLEVEL!"
+del "%CONFIG_CHECKER%" >nul 2>nul
 del "%CONFIG_CHECK_PS%" >nul 2>nul
 exit /b !CONFIG_CHECK_EXIT!
 
@@ -165,14 +188,25 @@ exit /b !CONFIG_CHECK_EXIT!
 <nul set /p "=%ESC%[2K%ESC%[1G[%ESC%[%~2m%~1%ESC%[0m] CP setup configuration"
 exit /b 0
 
+:replace_configuration_status_above
+<nul set /p "=%ESC%[2A%ESC%[2K%ESC%[1G[%ESC%[%~2m%~1%ESC%[0m] CP setup configuration%ESC%[2B%ESC%[1G"
+exit /b 0
+
 :print_completion
-if not "%CONFIG_REMOVED%"=="1" exit /b 0
 if "%ALL_MODE%"=="1" (
     echo [%ESC%[32mDONE%ESC%[0m] All setup-managed components and configuration were removed.
-) else (
-    echo [%ESC%[32mDONE%ESC%[0m] CP setup configuration removed.
-    echo External components you kept remain installed.
+    exit /b 0
 )
+set "COMPLETION_MESSAGE=Uninstall finished."
+if "%CONFIG_FOUND%"=="1" if "%CONFIG_REMOVED%"=="1" set "COMPLETION_MESSAGE=CP setup configuration removed."
+echo [%ESC%[32mDONE%ESC%[0m] %COMPLETION_MESSAGE%
+if "%CAN_REMOVE_REPO%"=="0" echo Components or configuration you kept remain installed.
+exit /b 0
+
+:wait_to_finish
+echo.
+echo Press any key to finish...
+pause >nul
 exit /b 0
 
 :enable_ansi
@@ -206,10 +240,6 @@ del "%ELEVATE_DELETE_SIGNAL%" >nul 2>nul
 >> "%ELEVATE_CMD%" echo set "CP_SETUP_EXIT=%%ERRORLEVEL%%"
 >> "%ELEVATE_CMD%" echo ^> "%ELEVATE_EXIT_FILE%" echo %%CP_SETUP_EXIT%%
 >> "%ELEVATE_CMD%" echo if exist "%ELEVATE_DELETE_SIGNAL%" cd /d "%%TEMP%%"
->> "%ELEVATE_CMD%" echo if exist "%ELEVATE_DELETE_SIGNAL%" exit /b %%CP_SETUP_EXIT%%
->> "%ELEVATE_CMD%" echo echo.
->> "%ELEVATE_CMD%" echo echo Press any key to exit...
->> "%ELEVATE_CMD%" echo pause ^>nul
 >> "%ELEVATE_CMD%" echo exit /b %%CP_SETUP_EXIT%%
 > "%ELEVATE_PS%" echo $ErrorActionPreference = 'Stop'
 >> "%ELEVATE_PS%" echo $requestLabel = 'Requesting administrator rights...'
@@ -267,12 +297,16 @@ exit /b 2
 :check_state
 call :has_setup_configuration
 set "CHECK_CONFIG_STATUS=!ERRORLEVEL!"
-if "!CHECK_CONFIG_STATUS!"=="2" exit /b 1
-if "!CHECK_CONFIG_STATUS!"=="1" (
-    echo [%ESC%[33mMISSING%ESC%[0m] CP setup configuration
-) else (
-    echo [%ESC%[38;5;114mFOUND%ESC%[0m] CP setup configuration
+if "!CHECK_CONFIG_STATUS!"=="2" (
+    echo.
+    exit /b 1
 )
+if "!CHECK_CONFIG_STATUS!"=="1" (
+    call :replace_configuration_status "MISSING" "33"
+) else (
+    call :replace_configuration_status "FOUND" "38;5;114"
+)
+echo.
 for %%V in (Winget.Git Winget.Neovim Winget.JDK Winget.MSYS2 Pacman.Toolchain) do (
     call :state_has "%%V"
     if not errorlevel 1 echo [%ESC%[38;5;114mFOUND%ESC%[0m] %%V installed by this setup
@@ -376,11 +410,10 @@ if errorlevel 1 (
     goto maybe_pacman
 )
 
-call :remove_pacman_toolchain_if_present
-if errorlevel 1 exit /b 1
 call :uninstall_msys2
 if errorlevel 1 exit /b 1
 call :clear_state "Winget.MSYS2"
+call :clear_state "Pacman.Toolchain"
 echo.
 exit /b 0
 
@@ -431,11 +464,10 @@ if not errorlevel 1 (
         call :clear_state "Pacman.Toolchain"
         echo.
     ) else (
-        call :remove_pacman_toolchain_if_present
-        if errorlevel 1 exit /b 1
         call :uninstall_msys2
         if errorlevel 1 exit /b 1
         call :clear_state "Winget.MSYS2"
+        call :clear_state "Pacman.Toolchain"
     )
     exit /b 0
 )
@@ -629,19 +661,6 @@ if "%ALL_MODE%"=="0" (
 call :remove_pacman_toolchain_now
 exit /b %ERRORLEVEL%
 
-:remove_pacman_toolchain_if_present
-call :state_has "Pacman.Toolchain"
-if errorlevel 1 exit /b 0
-call :has_pacman_toolchain
-if errorlevel 1 (
-    call :print_missing "MSYS2 CP toolchain"
-    call :clear_state "Pacman.Toolchain"
-    echo.
-    exit /b 0
-)
-call :remove_pacman_toolchain_now
-exit /b %ERRORLEVEL%
-
 :remove_pacman_toolchain_now
 
 call :find_msys2_shell
@@ -745,7 +764,9 @@ for %%I in ("%MSYS2_SHELL%") do set "MSYS2_BASH=%%~dpIusr\bin\bash.exe"
 if not exist "%MSYS2_BASH%" exit /b 1
 set "PACMAN_CHECKER=%TEMP%\cp_setup_find_pacman_%RANDOM%_%RANDOM%.cmd"
 > "%PACMAN_CHECKER%" echo @echo off
->> "%PACMAN_CHECKER%" echo "%MSYS2_BASH%" -lc "pacman -Qq mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python mingw-w64-x86_64-ruff 2^> /dev/null ^| grep -q ."
+>> "%PACMAN_CHECKER%" echo set "MSYSTEM=MINGW64"
+>> "%PACMAN_CHECKER%" echo set "CHERE_INVOKING=enabled_from_arguments"
+>> "%PACMAN_CHECKER%" echo "%MSYS2_BASH%" -lc "pacman -Qq mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python mingw-w64-x86_64-ruff" 2^>nul ^| findstr /r "." ^>nul
 >> "%PACMAN_CHECKER%" echo exit /b %%ERRORLEVEL%%
 set "SEARCH_COMMAND_INPUT=call ""%PACMAN_CHECKER%"""
 call :search_command "MSYS2 CP toolchain" "@env" "PACMAN_TOOLCHAIN"
@@ -756,6 +777,14 @@ exit /b !PACMAN_CHECK_EXIT!
 :search_command
 setlocal EnableExtensions EnableDelayedExpansion
 set "SEARCH_LABEL=%~1"
+set "SEARCH_ACTION=%~4"
+set "SEARCH_SUCCESS=%~5"
+set "SEARCH_SUCCESS_COLOR=%~6"
+set "SEARCH_SUCCESS_NO_NEWLINE=%~7"
+if not defined SEARCH_ACTION set "SEARCH_ACTION=SEARCHING"
+if not defined SEARCH_SUCCESS set "SEARCH_SUCCESS=FOUND"
+if not defined SEARCH_SUCCESS_COLOR set "SEARCH_SUCCESS_COLOR=38;5;114"
+if not defined SEARCH_SUCCESS_NO_NEWLINE set "SEARCH_SUCCESS_NO_NEWLINE=0"
 if /i "%~2"=="@env" (
     set "SEARCH_COMMAND=!SEARCH_COMMAND_INPUT!"
 ) else (
@@ -769,18 +798,19 @@ set "SEARCH_PS=%TEMP%\cp_setup_search_%RANDOM%_%RANDOM%.ps1"
 >> "%SEARCH_PS%" echo $esc = [char]27
 >> "%SEARCH_PS%" echo $cr = [char]13
 >> "%SEARCH_PS%" echo $clear = $esc + '[2K'
->> "%SEARCH_PS%" echo $searching = '[' + $esc + '[38;5;183mSEARCHING' + $esc + '[0m]'
->> "%SEARCH_PS%" echo $found = '[' + $esc + '[38;5;114mFOUND' + $esc + '[0m]'
+>> "%SEARCH_PS%" echo $action = '[' + $esc + '[38;5;183m' + $env:SEARCH_ACTION + $esc + '[0m]'
+>> "%SEARCH_PS%" echo $success = '[' + $esc + '[' + $env:SEARCH_SUCCESS_COLOR + 'm' + $env:SEARCH_SUCCESS + $esc + '[0m]'
+>> "%SEARCH_PS%" echo $successNoNewline = $env:SEARCH_SUCCESS_NO_NEWLINE -eq '1'
 >> "%SEARCH_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%SEARCH_PS%" echo $job = Start-Job -ScriptBlock { param($command) $items = @(^& $env:ComSpec /d /c $command 2^>$null); [pscustomobject]@{ ExitCode = $LASTEXITCODE; Items = $items } } -ArgumentList $command
 >> "%SEARCH_PS%" echo $i = 0
->> "%SEARCH_PS%" echo do { Write-Host -NoNewline ($cr + $clear + $searching + ' ' + $frames[$i %% $frames.Count] + ' ' + $label); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ } while ($job.State -eq 'Running')
+>> "%SEARCH_PS%" echo do { Write-Host -NoNewline ($cr + $clear + $action + ' ' + $frames[$i %% $frames.Count] + ' ' + $label); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ } while ($job.State -eq 'Running')
 >> "%SEARCH_PS%" echo $result = Receive-Job -Wait $job
 >> "%SEARCH_PS%" echo Remove-Job $job -Force
 >> "%SEARCH_PS%" echo $items = @($result.Items)
 >> "%SEARCH_PS%" echo if ($items.Count) { [IO.File]::WriteAllLines($output,[string[]]$items) } else { [IO.File]::WriteAllText($output,'') }
 >> "%SEARCH_PS%" echo $exitCode = [int]$result.ExitCode
->> "%SEARCH_PS%" echo if ($exitCode -eq 0) { Write-Host ($cr + $clear + $found + ' ' + $label) } else { Write-Host -NoNewline ($cr + $clear) }
+>> "%SEARCH_PS%" echo if ($exitCode -eq 0) { if ($successNoNewline) { Write-Host -NoNewline ($cr + $clear + $success + ' ' + $label) } else { Write-Host ($cr + $clear + $success + ' ' + $label) } } else { Write-Host -NoNewline ($cr + $clear) }
 >> "%SEARCH_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SEARCH_PS%"
 set "SEARCH_EXIT=%ERRORLEVEL%"
@@ -909,4 +939,5 @@ exit /b %ERRORLEVEL%
 :failed
 echo.
 echo [%ESC%[31mFAILED%ESC%[0m] CP setup uninstall did not complete.
+call :wait_to_finish
 exit /b 1
