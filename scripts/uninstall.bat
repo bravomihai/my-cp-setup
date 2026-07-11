@@ -122,15 +122,20 @@ set "ELEVATE_LOG=%TEMP%\cp_setup_uninstall_elevate.log"
 set "ELEVATE_EXIT_FILE=%TEMP%\cp_setup_uninstall_elevate_exit_%RANDOM%_%RANDOM%.txt"
 set "ELEVATE_STARTED_FILE=%TEMP%\cp_setup_uninstall_elevate_started_%RANDOM%_%RANDOM%.txt"
 set "ELEVATE_CMD=%TEMP%\cp_setup_uninstall_elevate_%RANDOM%_%RANDOM%.cmd"
+set "ELEVATE_DELETE_SIGNAL=%TEMP%\cp_setup_uninstall_delete_%RANDOM%_%RANDOM%.txt"
 set "CP_UNINSTALL_SCRIPT=%~f0"
 set "CP_UNINSTALL_ARGS=%ORIGINAL_ARGS%"
 set "CP_UNINSTALL_CWD=%ROOT%"
+set "CP_DELETE_SIGNAL=%ELEVATE_DELETE_SIGNAL%"
+del "%ELEVATE_DELETE_SIGNAL%" >nul 2>nul
 > "%ELEVATE_CMD%" echo @echo off
 >> "%ELEVATE_CMD%" echo ^> "%ELEVATE_EXIT_FILE%" echo 900
 >> "%ELEVATE_CMD%" echo cd /d "%CP_UNINSTALL_CWD%"
 >> "%ELEVATE_CMD%" echo call "%CP_UNINSTALL_SCRIPT%" %CP_UNINSTALL_ARGS%
 >> "%ELEVATE_CMD%" echo set "CP_SETUP_EXIT=%%ERRORLEVEL%%"
 >> "%ELEVATE_CMD%" echo ^> "%ELEVATE_EXIT_FILE%" echo %%CP_SETUP_EXIT%%
+>> "%ELEVATE_CMD%" echo if exist "%ELEVATE_DELETE_SIGNAL%" cd /d "%%TEMP%%"
+>> "%ELEVATE_CMD%" echo if exist "%ELEVATE_DELETE_SIGNAL%" exit /b %%CP_SETUP_EXIT%%
 >> "%ELEVATE_CMD%" echo echo.
 >> "%ELEVATE_CMD%" echo echo Press any key to exit...
 >> "%ELEVATE_CMD%" echo pause ^>nul
@@ -176,6 +181,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%ELEVATE_PS%"
 set "ELEVATE_EXIT=%ERRORLEVEL%"
 del "%ELEVATE_PS%" >nul 2>nul
 del "%ELEVATE_CMD%" >nul 2>nul
+if exist "%ELEVATE_DELETE_SIGNAL%" cd /d "%TEMP%"
+del "%ELEVATE_DELETE_SIGNAL%" >nul 2>nul
 if not "%ELEVATE_EXIT%"=="0" exit /b 1
 exit /b 2
 
@@ -714,6 +721,7 @@ exit /b %SPIN_EXIT%
 :schedule_repo_removal
 set "CP_DELETE_ROOT=%ROOT%"
 set "DELETE_CMD=%TEMP%\cp_setup_delete_%RANDOM%_%RANDOM%.cmd"
+if defined CP_DELETE_SIGNAL > "%CP_DELETE_SIGNAL%" echo ready
 cd /d "%TEMP%"
 > "%DELETE_CMD%" echo @echo off
 >> "%DELETE_CMD%" echo cd /d "%%TEMP%%"
