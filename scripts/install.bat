@@ -151,6 +151,8 @@ if "%CHECK_ONLY%"=="0" (
     set "CP_SETUP_ROOT=%ROOT%"
     call :install_cmd_macros
     if errorlevel 1 goto failed
+    call :record_component "Config.Managed"
+    if errorlevel 1 goto failed
 )
 
 echo Verifying setup...
