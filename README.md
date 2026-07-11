@@ -12,13 +12,13 @@ cd /d my-cp-setup
 scripts\install.bat
 ```
 
-Verify without changing environment variables:
+Preview the setup state without installing components or changing setup configuration:
 
 ```bat
 scripts\install.bat --check
 ```
 
-Show resolved executable paths during installation. Long-running package operations keep the same spinner as a normal install:
+Show resolved executable paths during installation:
 
 ```bat
 scripts\install.bat --verbose
@@ -27,13 +27,13 @@ scripts\install.bat --verbose
 If `--check` reports missing components, run the installer without `--check` to install them.
 For `ac-library`, `--check` only reports whether the submodule needs an update; normal install updates it.
 
-Remove only the environment entries added by this setup:
+Interactively remove setup-managed external components and configuration:
 
 ```bat
 scripts\uninstall.bat
 ```
 
-Remove every external component recorded as installed by this setup, then choose whether to remove the repository folder too:
+Remove all setup-managed external components and configuration, then choose whether to remove the repository folder too:
 
 ```bat
 scripts\uninstall.bat --all
@@ -57,7 +57,7 @@ scripts\install.bat
 - usable Python 3, preferring MSYS2 Python and ignoring the Microsoft Store `WindowsApps` alias
 - `ac-library` submodule state
 
-If a tool is missing during a normal install, it tries to install it with `winget`. For C++ and Python, it installs MSYS2 externally and installs only the CP toolchain with `pacman`: GCC, GDB, clang tools, and Python. `--verbose` also shows the resolved executable paths after installation.
+If a tool is missing during a normal install, it tries to install it with `winget`. For C++ and Python, it installs MSYS2 and manages the CP toolchain through `pacman`. `--verbose` also shows the resolved executable paths after installation.
 
 The installer also:
 
@@ -69,9 +69,7 @@ The installer also:
 - initializes and updates the `ac-library` submodule
 - verifies C++, Java, Python, and expansion for all three languages
 
-The installer records external installs under the current user registry key for diagnostics. Uninstallation also detects currently available components, so it works for setups installed before this tracking was added.
-
-External tools are not stored in this repository.
+The installer records external components it installs under the current-user registry key. Uninstall removes only those recorded components and reports detected pre-existing ones as `KEPT`.
 
 ## Structure
 
@@ -94,7 +92,7 @@ my-cp-setup
 |   |-- cp_macros            CMD DOSKEY macros
 |   |-- expand.py            Generate submit.cpp/submit.java/submit.py
 |   |-- install.bat          Windows installer
-|   |-- uninstall.bat        Remove environment entries added by setup
+|   |-- uninstall.bat        Uninstall setup-managed components and configuration
 |   `-- run.py               Run C++/Java/Python files
 |-- template/
 |   |-- cpp/solve.cpp
@@ -135,27 +133,21 @@ Generate a standalone submit file and copy it to the clipboard:
 "%CP_PYTHON%" scripts\expand.py template\python\solve.py
 ```
 
-On success it prints one of:
-
-```text
-submit.cpp generated
-submit.java generated
-submit.py generated
-```
-
-On failure it prints an `EXPAND FAILED` message.
+On success it reports the generated target file; on failure it prints an `EXPAND FAILED` message.
 
 ## Uninstall
 
-`scripts\uninstall.bat` automatically removes entries managed by this setup:
+When configuration cleanup is selected, `scripts\uninstall.bat` removes:
 
-- known User `Path` entries added by the installer
+- known User `Path` entries managed by the setup
 - `XDG_CONFIG_HOME`, `CP_SETUP_ROOT`, `CP_PYTHON`, and `CP_GPP` when they point to this setup or the known MSYS2 install paths
 - its CMD AutoRun command for `scripts\cp_macros`, while preserving other commands
 
-For a normal uninstall, it requests administrator rights once at startup, then asks before removing Git, Neovim, JDK, MSYS2, or the CP toolchain only when that component was recorded as installed by this setup. Detected pre-existing components are reported as `KEPT` without blocking repository-folder removal. Choosing Neovim removes only its local `nvim-data` directory (LazyVim, Mason, and downloaded plugins); this setup's tracked `nvim` configuration remains in the repository. If setup-installed MSYS2 is kept, it separately asks whether to remove the CP packages installed through `pacman`. Components that are not registered with winget are kept rather than failing or being deleted directly. The repository-folder prompt appears only when every offered removal and configuration cleanup was accepted. `--all` removes only components recorded as installed by this setup and its configuration automatically, reports detected pre-existing components as `KEPT`, and clears stale records without stopping the remaining cleanup. It then asks whether to remove the repository folder. Each prompt displays `[Y/N]`; it accepts `y`, `ye`, `yes`, or `yeah` to confirm; `n`, `no`, or `nah` to decline, in any letter case.
+For a normal uninstall, it requests administrator rights once at startup, then asks before removing Git, Neovim, JDK, MSYS2, or the CP toolchain only when that component was recorded as installed by this setup. Detected pre-existing components are reported as `KEPT` without blocking repository-folder removal. Choosing Neovim removes only its local `nvim-data` directory (LazyVim, Mason, and downloaded plugins); this setup's tracked `nvim` configuration remains in the repository. If MSYS2 is kept and the CP toolchain was recorded as setup-managed, it separately asks whether to remove that toolchain. Components that are no longer registered with winget are kept and their stale setup records are cleared. The repository-folder prompt appears only when every offered removal and configuration cleanup was accepted.
 
-Preview without changing anything:
+`--all` removes setup-managed external components and configuration automatically, reports detected pre-existing components as `KEPT`, clears stale records without stopping the remaining cleanup, then asks whether to remove the repository folder. Each prompt displays `[Y/N]`; it accepts `y`, `ye`, `yes`, or `yeah` to confirm; `n`, `no`, or `nah` to decline, in any letter case.
+
+Preview the uninstall state without running cleanup:
 
 ```bat
 scripts\uninstall.bat --check
@@ -163,26 +155,16 @@ scripts\uninstall.bat --check
 
 ## CMD Macros
 
-Install macro loading:
-
-Use `scripts\install.bat`; macro loading is part of the installer.
-
-New `cmd.exe` windows load these automatically after install.
+New `cmd.exe` windows load these automatically after installation.
 The installer sets `HKCU\Software\Microsoft\Command Processor\AutoRun` to load `scripts\cp_macros` with `doskey /macrofile`.
 The `run` and `expand` macros use `CP_PYTHON`, so they do not depend on the `python.exe` Microsoft Store alias. See `scripts\cp_macros` for the current macro list.
 
 ## Neovim
 
-The installer sets `XDG_CONFIG_HOME` to the repository root. For example, if the repo was cloned to `C:\Users\mihai\my-cp-setup`, it sets:
+The installer sets `XDG_CONFIG_HOME` to the repository root, so Neovim loads `<repo-root>\nvim`. For example, if the repo was cloned to `C:\Users\mihai\my-cp-setup`, it sets:
 
 ```text
 XDG_CONFIG_HOME=C:\Users\mihai\my-cp-setup
-```
-
-Neovim then loads the `nvim` folder inside that repository:
-
-```text
-<repo-root>\nvim
 ```
 
 ## Language Server
@@ -201,14 +183,4 @@ This supports C++ includes such as:
 ```cpp
 #include <atcoder/all>
 #include <my_libraries/cp.hpp>
-```
-
-Java and Python templates keep their imports stable:
-
-```java
-import static my_libraries.Cp.*;
-```
-
-```python
-from my_libraries.cp import *
 ```

@@ -49,6 +49,11 @@ if "%CHECK_ONLY%"=="0" (
     call :refresh_path
 )
 
+if "%CHECK_ONLY%"=="0" (
+    call :capture_user_path
+    if errorlevel 1 goto failed
+)
+
 if "%CHECK_ONLY%"=="1" (
     echo Checking main components...
 ) else (
@@ -112,6 +117,10 @@ if "%CHECK_ONLY%"=="1" (
     call :install_paths
 )
 if errorlevel 1 goto failed
+if "%CHECK_ONLY%"=="0" (
+    call :record_managed_path_entries
+    if errorlevel 1 goto failed
+)
 call :refresh_path
 
 if exist "%ROOT%\.git" (
@@ -600,6 +609,15 @@ exit /b %SPIN_EXIT%
 
 :install_paths
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $check='%~1' -ieq 'check'; $verbose='%VERBOSE%' -eq '1'; $esc=[char]27; $found='['+$esc+'[38;5;114mFOUND'+$esc+'[0m]'; $jdkBins=@(); if (Test-Path -LiteralPath 'C:\Program Files\Eclipse Adoptium') { $jdkBins=Get-ChildItem -LiteralPath 'C:\Program Files\Eclipse Adoptium' -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'bin' } }; $c=@((Join-Path $root 'scripts'),'C:\Program Files\Git\cmd','C:\Program Files\Git\usr\bin','C:\Program Files\Git\mingw64\libexec\git-core','D:\software\programming\git\Git\cmd','D:\software\programming\git\Git\usr\bin','D:\software\programming\git\Git\mingw64\libexec\git-core','C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin') + $jdkBins; $e=$c | Where-Object { Test-Path -LiteralPath $_ }; if ($check) { if ($verbose) { Write-Host ($found+' Environment paths:'); foreach ($p in $e) { Write-Host ('  '+$p) } } else { Write-Host \"[$($esc)[38;5;183mCHECKING$($esc)[0m] Environment paths\" }; exit 0 }; $u=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $u) { $u='' }; $known=@($env:LOCALAPPDATA + '\Microsoft\WindowsApps') + $c; $known=$known | Where-Object { $_ } | Sort-Object Length -Descending -Unique; $parts=New-Object System.Collections.Generic.List[string]; foreach ($raw in ($u -split ';')) { $s=$raw.Trim(); while ($s) { $hit=$null; $hitAt=-1; foreach ($k in $known) { $i=$s.IndexOf($k, [StringComparison]::OrdinalIgnoreCase); if ($i -ge 0 -and ($hitAt -lt 0 -or $i -lt $hitAt -or ($i -eq $hitAt -and $k.Length -gt $hit.Length))) { $hit=$k; $hitAt=$i } }; if (-not $hit) { $parts.Add($s); break }; if ($hitAt -gt 0) { $prefix=$s.Substring(0,$hitAt).Trim(); if ($prefix) { $parts.Add($prefix) } }; $parts.Add($hit); $s=$s.Substring($hitAt + $hit.Length).Trim() } }; foreach ($p in $e) { $parts.Add($p) }; $clean=New-Object System.Collections.Generic.List[string]; foreach ($p in $parts) { $v=$p.Trim().TrimEnd('\'); if (-not $v) { continue }; $exists=$false; foreach ($x in $clean) { if ($x.TrimEnd('\') -ieq $v) { $exists=$true; break } }; if (-not $exists) { $clean.Add($v) } }; [Environment]::SetEnvironmentVariable('Path',($clean -join ';'),'User')"
+exit /b %ERRORLEVEL%
+
+:capture_user_path
+set "PATH_SNAPSHOT=%TEMP%\cp_setup_path_before_%RANDOM%_%RANDOM%.txt"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$path=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $path) { $path='' }; Set-Content -LiteralPath $env:PATH_SNAPSHOT -Value $path -NoNewline"
+exit /b %ERRORLEVEL%
+
+:record_managed_path_entries
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$snapshot=$env:PATH_SNAPSHOT; try { if (-not (Test-Path -LiteralPath $snapshot)) { exit 1 }; $before=Get-Content -LiteralPath $snapshot -Raw; $after=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $after) { $after='' }; $root='%ROOT%'; $jdkBins=@(); if (Test-Path -LiteralPath 'C:\Program Files\Eclipse Adoptium') { $jdkBins=Get-ChildItem -LiteralPath 'C:\Program Files\Eclipse Adoptium' -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'bin' } }; $targets=@((Join-Path $root 'scripts'),'C:\Program Files\Git\cmd','C:\Program Files\Git\usr\bin','C:\Program Files\Git\mingw64\libexec\git-core','D:\software\programming\git\Git\cmd','D:\software\programming\git\Git\usr\bin','D:\software\programming\git\Git\mingw64\libexec\git-core','C:\Program Files\Neovim\bin','D:\software\programming\neovim\bin','C:\msys64\mingw64\bin','C:\msys64\ucrt64\bin','D:\software\programming\msys2\mingw64\bin') + $jdkBins; $normal={ param($path) if ($path) { $path.Trim().TrimEnd('\') } }; $beforeEntries=@($before -split ';' | ForEach-Object { & $normal $_ } | Where-Object { $_ }); $afterEntries=@($after -split ';' | ForEach-Object { & $normal $_ } | Where-Object { $_ }); $new=@($targets | ForEach-Object { & $normal $_ } | Where-Object { $_ -and ($afterEntries -icontains $_) -and -not ($beforeEntries -icontains $_) }); $key='HKCU:\Software\my-cp-setup'; $existing=@((Get-ItemProperty -Path $key -Name 'Path.Entries' -ErrorAction SilentlyContinue).'Path.Entries' | ForEach-Object { & $normal $_ } | Where-Object { $_ }); $owned=@($existing + $new | Sort-Object -Unique); if ($owned.Count) { if (-not (Test-Path -LiteralPath $key)) { New-Item -Path $key -Force | Out-Null }; New-ItemProperty -Path $key -Name 'Path.Entries' -PropertyType MultiString -Value ([string[]]$owned) -Force | Out-Null }; exit 0 } finally { Remove-Item -LiteralPath $snapshot -Force -ErrorAction SilentlyContinue }"
 exit /b %ERRORLEVEL%
 
 :install_cmd_macros
