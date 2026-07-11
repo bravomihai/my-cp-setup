@@ -105,4 +105,3 @@ my-cp-setup
 ## Documentation
 
 - [Usage guide](docs/usage.md): daily workflow, templates, keymaps, running, expansion, debugging, helpers, and CMD macros.
-- [`nvim/README.md`](nvim/README.md): upstream LazyVim configuration notes.
