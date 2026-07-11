@@ -57,36 +57,26 @@ if "%ALL_MODE%"=="1" (
 )
 if errorlevel 1 goto failed
 
-if "%ALL_MODE%"=="0" (
-    echo.
-    call :ask_yes_no "Remove CP setup configuration"
-    if errorlevel 1 (
-        echo [%ESC%[38;5;244mKEPT%ESC%[0m] CP setup configuration
-        set "CAN_REMOVE_REPO=0"
-        goto decide_repo_removal
-    )
-)
-
-echo.
-<nul set /p "=[%ESC%[38;5;183mCHECKING%ESC%[0m] CP setup configuration"
 call :has_setup_configuration
 set "CONFIG_STATUS=!ERRORLEVEL!"
 set "CONFIG_FOUND=1"
 if "!CONFIG_STATUS!"=="2" goto configuration_failed
 if "!CONFIG_STATUS!"=="1" set "CONFIG_FOUND=0"
+
+if "%ALL_MODE%"=="1" goto configuration_ready
+if "%CONFIG_FOUND%"=="0" goto configuration_ready
+call :ask_yes_no "Remove CP setup configuration"
+if not errorlevel 1 goto configuration_ready
+echo [%ESC%[38;5;244mKEPT%ESC%[0m] CP setup configuration
+set "CAN_REMOVE_REPO=0"
+goto decide_repo_removal
+
+:configuration_ready
+<nul set /p "=[%ESC%[38;5;183mCHECKING%ESC%[0m] CP setup configuration"
 if "%CONFIG_FOUND%"=="1" call :replace_configuration_status "REMOVING" "38;5;153"
-set "CONFIG_REMOVAL_ACTIVE=1"
-call :remove_path_entries
+call :remove_setup_configuration
 if errorlevel 1 goto configuration_failed
 
-call :remove_env_vars
-if errorlevel 1 goto configuration_failed
-
-call :remove_cmd_macros
-if errorlevel 1 goto configuration_failed
-
-call :clear_state "Config.Managed"
-set "CONFIG_REMOVAL_ACTIVE="
 if "%CONFIG_FOUND%"=="1" (
     call :replace_configuration_status "REMOVED" "38;5;114"
 ) else (
@@ -103,11 +93,12 @@ if "%ALL_MODE%"=="0" if not "%CAN_REMOVE_REPO%"=="1" goto repo_kept
 echo.
 call :ask_yes_no "Remove this CP setup folder too"
 if not errorlevel 1 (
+    echo [%ESC%[38;5;153mREMOVING%ESC%[0m] CP setup folder shortly.
     reg delete "%STATE_KEY%" /f >nul 2>nul
     call :schedule_repo_removal
     if errorlevel 1 goto failed
+    echo.
     call :print_completion
-    echo [%ESC%[38;5;153mREMOVING%ESC%[0m] CP setup folder shortly.
     echo Restart terminals so environment changes are visible everywhere.
     exit /b 0
 )
@@ -126,14 +117,13 @@ echo Restart terminals so environment changes are visible everywhere.
 exit /b 0
 
 :configuration_failed
-set "CONFIG_REMOVAL_ACTIVE="
 echo.
 goto failed
 
 :has_setup_configuration
 set "CONFIG_ROOT=%ROOT%"
 set "MACROS=%ROOT%\scripts\cp_macros"
-call :state_has "Config.Managed"
+reg query "%STATE_KEY%" /v "Config.Managed" >nul 2>nul
 if errorlevel 1 (
     set "CONFIG_MANAGED=0"
 ) else (
@@ -211,6 +201,7 @@ del "%ELEVATE_DELETE_SIGNAL%" >nul 2>nul
 > "%ELEVATE_CMD%" echo @echo off
 >> "%ELEVATE_CMD%" echo ^> "%ELEVATE_EXIT_FILE%" echo 900
 >> "%ELEVATE_CMD%" echo cd /d "%CP_UNINSTALL_CWD%"
+>> "%ELEVATE_CMD%" echo set "CP_DELETE_SIGNAL=%ELEVATE_DELETE_SIGNAL%"
 >> "%ELEVATE_CMD%" echo call "%CP_UNINSTALL_SCRIPT%" %CP_UNINSTALL_ARGS%
 >> "%ELEVATE_CMD%" echo set "CP_SETUP_EXIT=%%ERRORLEVEL%%"
 >> "%ELEVATE_CMD%" echo ^> "%ELEVATE_EXIT_FILE%" echo %%CP_SETUP_EXIT%%
@@ -288,18 +279,56 @@ for %%V in (Winget.Git Winget.Neovim Winget.JDK Winget.MSYS2 Pacman.Toolchain) d
 )
 exit /b 0
 
-:remove_path_entries
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$key='HKCU:\Software\my-cp-setup'; $report=$env:CONFIG_REMOVAL_ACTIVE -ne '1'; $esc=[char]27; $removed='['+$esc+'[38;5;114mREMOVED'+$esc+'[0m]'; $missing='['+$esc+'[33mMISSING'+$esc+'[0m]'; $owned=@((Get-ItemProperty -Path $key -Name 'Path.Entries' -ErrorAction SilentlyContinue).'Path.Entries' | Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\') }); if (-not $owned.Count) { if ($report) { Write-Host ($missing+' User PATH entries managed by setup') }; exit 0 }; $path=[Environment]::GetEnvironmentVariable('Path','User'); if ($null -eq $path) { $path='' }; $parts=@($path -split ';' | Where-Object { $_ }); $found=@($parts | Where-Object { $owned -icontains $_.Trim().TrimEnd('\') }); if (-not $found.Count) { Remove-ItemProperty -Path $key -Name 'Path.Entries' -ErrorAction SilentlyContinue; if ($report) { Write-Host ($missing+' User PATH entries managed by setup') }; exit 0 }; $kept=@($parts | Where-Object { -not ($owned -icontains $_.Trim().TrimEnd('\')) }); [Environment]::SetEnvironmentVariable('Path',($kept -join ';'),'User'); Remove-ItemProperty -Path $key -Name 'Path.Entries' -ErrorAction SilentlyContinue; if ($report) { Write-Host ($removed+' User PATH entries managed by setup') }"
-exit /b %ERRORLEVEL%
-
-:remove_env_vars
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$root='%ROOT%'; $report=$env:CONFIG_REMOVAL_ACTIVE -ne '1'; $esc=[char]27; $removed='['+$esc+'[38;5;114mREMOVED'+$esc+'[0m]'; $key='HKCU:\Software\my-cp-setup'; $managed=(Get-ItemProperty -Path $key -Name 'Config.Managed' -ErrorAction SilentlyContinue).'Config.Managed' -ne $null; $exact=@{XDG_CONFIG_HOME=$root; CP_SETUP_ROOT=$root}; $hasRootEnvironment=$false; foreach ($name in $exact.Keys) { $v=[Environment]::GetEnvironmentVariable($name,'User'); if ($v -and $v.TrimEnd('\') -ieq $exact[$name].TrimEnd('\')) { $hasRootEnvironment=$true; break } }; $macros=Join-Path $root 'scripts\cp_macros'; $command='doskey /macrofile=\"'+$macros+'\"'; $autorun=(Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Command Processor' -Name AutoRun -ErrorAction SilentlyContinue).AutoRun; $hasMacros=$autorun -and $autorun.IndexOf($command,[StringComparison]::OrdinalIgnoreCase) -ge 0; $removeCpp=$managed -or $hasRootEnvironment -or $hasMacros; foreach ($name in $exact.Keys) { $v=[Environment]::GetEnvironmentVariable($name,'User'); if ($v -and $v.TrimEnd('\') -ieq $exact[$name].TrimEnd('\')) { [Environment]::SetEnvironmentVariable($name,$null,'User'); if ($report) { Write-Host ($removed+' '+$name) } } }; if (-not $removeCpp) { exit 0 }; $bases=@('C:\msys64','D:\software\programming\msys2'); foreach ($name in @('CP_PYTHON','CP_GPP')) { $v=[Environment]::GetEnvironmentVariable($name,'User'); if (-not $v) { continue }; foreach ($base in $bases) { if ($v.StartsWith($base,[StringComparison]::OrdinalIgnoreCase)) { [Environment]::SetEnvironmentVariable($name,$null,'User'); if ($report) { Write-Host ($removed+' '+$name) }; break } } }"
-exit /b %ERRORLEVEL%
-
-:remove_cmd_macros
+:remove_setup_configuration
+set "CONFIG_ROOT=%ROOT%"
 set "MACROS=%ROOT%\scripts\cp_macros"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$macros=$env:MACROS; $report=$env:CONFIG_REMOVAL_ACTIVE -ne '1'; $esc=[char]27; $removed='['+$esc+'[38;5;114mREMOVED'+$esc+'[0m]'; $key='HKCU:\Software\Microsoft\Command Processor'; $command='doskey /macrofile=\"'+$macros+'\"'; $autorun=(Get-ItemProperty -Path $key -Name AutoRun -ErrorAction SilentlyContinue).AutoRun; if ($autorun -and $autorun.IndexOf($command,[StringComparison]::OrdinalIgnoreCase) -ge 0) { $pattern='(?i)(?:^\s*|\s*&\s*)'+[regex]::Escape($command)+'(?=\s*(?:&|$))'; $updated=[regex]::Replace($autorun,$pattern,'').Trim(); $updated=[regex]::Replace($updated,'^\s*&\s*',''); $updated=[regex]::Replace($updated,'\s*&\s*$',''); if ($updated) { Set-ItemProperty -Path $key -Name AutoRun -Value $updated } else { Remove-ItemProperty -Path $key -Name AutoRun -ErrorAction Stop }; if ($report) { Write-Host ($removed+' CMD AutoRun cp_macros') } }"
-exit /b %ERRORLEVEL%
+set "CONFIG_CLEANUP_PS=%TEMP%\cp_setup_config_cleanup_%RANDOM%_%RANDOM%.ps1"
+> "%CONFIG_CLEANUP_PS%" echo $ErrorActionPreference = 'Stop'
+>> "%CONFIG_CLEANUP_PS%" echo $key = 'HKCU:\Software\my-cp-setup'
+>> "%CONFIG_CLEANUP_PS%" echo $root = $env:CONFIG_ROOT
+>> "%CONFIG_CLEANUP_PS%" echo $macros = $env:MACROS
+>> "%CONFIG_CLEANUP_PS%" echo $managedValue = ^(Get-ItemProperty -Path $key -Name 'Config.Managed' -ErrorAction SilentlyContinue^).'Config.Managed'
+>> "%CONFIG_CLEANUP_PS%" echo $managed = $null -ne $managedValue
+>> "%CONFIG_CLEANUP_PS%" echo $ownedValue = ^(Get-ItemProperty -Path $key -Name 'Path.Entries' -ErrorAction SilentlyContinue^).'Path.Entries'
+>> "%CONFIG_CLEANUP_PS%" echo $owned = @^(^)
+>> "%CONFIG_CLEANUP_PS%" echo foreach ^($entry in $ownedValue^) { if ^($entry^) { $owned += $entry.TrimEnd^('\'^) } }
+>> "%CONFIG_CLEANUP_PS%" echo $path = [Environment]::GetEnvironmentVariable^('Path','User'^)
+>> "%CONFIG_CLEANUP_PS%" echo if ^($null -eq $path^) { $path = '' }
+>> "%CONFIG_CLEANUP_PS%" echo $parts = @^(^)
+>> "%CONFIG_CLEANUP_PS%" echo foreach ^($entry in ^($path -split ';'^)^) { if ^($entry^) { $parts += $entry } }
+>> "%CONFIG_CLEANUP_PS%" echo if ^($owned.Count^) {
+>> "%CONFIG_CLEANUP_PS%" echo     $kept = @^(^)
+>> "%CONFIG_CLEANUP_PS%" echo     foreach ^($entry in $parts^) { if ^(-not ^($owned -icontains $entry.Trim^(^).TrimEnd^('\'^)^)^) { $kept += $entry } }
+>> "%CONFIG_CLEANUP_PS%" echo     [Environment]::SetEnvironmentVariable^('Path',^($kept -join ';'^),'User'^)
+>> "%CONFIG_CLEANUP_PS%" echo }
+>> "%CONFIG_CLEANUP_PS%" echo Remove-ItemProperty -Path $key -Name 'Path.Entries' -ErrorAction SilentlyContinue
+>> "%CONFIG_CLEANUP_PS%" echo $exact = @{ XDG_CONFIG_HOME = $root; CP_SETUP_ROOT = $root }
+>> "%CONFIG_CLEANUP_PS%" echo $hasRootEnvironment = $false
+>> "%CONFIG_CLEANUP_PS%" echo foreach ^($name in $exact.Keys^) { $value = [Environment]::GetEnvironmentVariable^($name,'User'^); if ^($value -and $value.TrimEnd^('\'^) -ieq $exact[$name].TrimEnd^('\'^)^) { $hasRootEnvironment = $true; break } }
+>> "%CONFIG_CLEANUP_PS%" echo $command = 'doskey /macrofile="' + $macros + '"'
+>> "%CONFIG_CLEANUP_PS%" echo $autorun = ^(Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Command Processor' -Name AutoRun -ErrorAction SilentlyContinue^).AutoRun
+>> "%CONFIG_CLEANUP_PS%" echo $hasMacros = $autorun -and $autorun.IndexOf^($command,[StringComparison]::OrdinalIgnoreCase^) -ge 0
+>> "%CONFIG_CLEANUP_PS%" echo $removeCpp = $managed -or $hasRootEnvironment -or $hasMacros
+>> "%CONFIG_CLEANUP_PS%" echo foreach ^($name in $exact.Keys^) { $value = [Environment]::GetEnvironmentVariable^($name,'User'^); if ^($value -and $value.TrimEnd^('\'^) -ieq $exact[$name].TrimEnd^('\'^)^) { [Environment]::SetEnvironmentVariable^($name,$null,'User'^) } }
+>> "%CONFIG_CLEANUP_PS%" echo if ^($removeCpp^) {
+>> "%CONFIG_CLEANUP_PS%" echo     $bases = @^('C:\msys64','D:\software\programming\msys2'^)
+>> "%CONFIG_CLEANUP_PS%" echo     foreach ^($name in @^('CP_PYTHON','CP_GPP'^)^) {
+>> "%CONFIG_CLEANUP_PS%" echo         $value = [Environment]::GetEnvironmentVariable^($name,'User'^)
+>> "%CONFIG_CLEANUP_PS%" echo         foreach ^($base in $bases^) { if ^($value -and $value.StartsWith^($base,[StringComparison]::OrdinalIgnoreCase^)^) { [Environment]::SetEnvironmentVariable^($name,$null,'User'^); break } }
+>> "%CONFIG_CLEANUP_PS%" echo     }
+>> "%CONFIG_CLEANUP_PS%" echo }
+>> "%CONFIG_CLEANUP_PS%" echo if ^($hasMacros^) {
+>> "%CONFIG_CLEANUP_PS%" echo     $entries = @^(^)
+>> "%CONFIG_CLEANUP_PS%" echo     foreach ^($entry in $autorun.Split^([char]38^)^) { $trimmed = $entry.Trim^(^); if ^($trimmed -and $trimmed -ine $command^) { $entries += $trimmed } }
+>> "%CONFIG_CLEANUP_PS%" echo     $separator = ' ' + [char]38 + ' '
+>> "%CONFIG_CLEANUP_PS%" echo     $updated = [string]::Join^($separator,[string[]]$entries^)
+>> "%CONFIG_CLEANUP_PS%" echo     if ^($updated^) { Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Command Processor' -Name AutoRun -Value $updated } else { Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Command Processor' -Name AutoRun -ErrorAction Stop }
+>> "%CONFIG_CLEANUP_PS%" echo }
+>> "%CONFIG_CLEANUP_PS%" echo Remove-ItemProperty -Path $key -Name 'Config.Managed' -ErrorAction SilentlyContinue
+powershell -NoProfile -ExecutionPolicy Bypass -File "%CONFIG_CLEANUP_PS%"
+set "CONFIG_CLEANUP_EXIT=!ERRORLEVEL!"
+del "%CONFIG_CLEANUP_PS%" >nul 2>nul
+exit /b !CONFIG_CLEANUP_EXIT!
 
 :remove_external_components
 call :state_has "Winget.Git"
@@ -850,34 +879,17 @@ cd /d "%TEMP%"
 >> "%DELETE_PS%" echo $root = [IO.Path]::GetFullPath^($env:CP_DELETE_ROOT^)
 >> "%DELETE_PS%" echo $marker = Join-Path $root 'scripts\install.bat'
 >> "%DELETE_PS%" echo if ^($root -eq [IO.Path]::GetPathRoot^($root^) -or -not ^(Test-Path -LiteralPath $marker^)^) { Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue; exit 1 }
->> "%DELETE_PS%" echo function Test-ExplorerFolderOpen {
->> "%DELETE_PS%" echo     param^([string]$path^)
->> "%DELETE_PS%" echo     try {
->> "%DELETE_PS%" echo         $shell = New-Object -ComObject Shell.Application
->> "%DELETE_PS%" echo         $normalized = [IO.Path]::GetFullPath^($path^).TrimEnd^('\'^)
->> "%DELETE_PS%" echo         foreach ^($window in @^($shell.Windows^(^)^)^) {
->> "%DELETE_PS%" echo             try {
->> "%DELETE_PS%" echo                 $location = [string]$window.Document.Folder.Self.Path
->> "%DELETE_PS%" echo                 $candidate = [IO.Path]::GetFullPath^($location^).TrimEnd^('\'^)
->> "%DELETE_PS%" echo             } catch { continue }
->> "%DELETE_PS%" echo             if ^($candidate -ieq $normalized -or $candidate.StartsWith^($normalized+'\',[StringComparison]::OrdinalIgnoreCase^)^) { return $true }
->> "%DELETE_PS%" echo         }
->> "%DELETE_PS%" echo     } catch {}
->> "%DELETE_PS%" echo     return $false
->> "%DELETE_PS%" echo }
 >> "%DELETE_PS%" echo try {
->> "%DELETE_PS%" echo     Start-Sleep -Seconds 2
+>> "%DELETE_PS%" echo     Start-Sleep -Seconds 1
 >> "%DELETE_PS%" echo     $staged = $null
->> "%DELETE_PS%" echo     $explorerOpen = $false
 >> "%DELETE_PS%" echo     for ^($attempt = 0; $attempt -lt 20; $attempt++^) {
->> "%DELETE_PS%" echo         if ^(Test-ExplorerFolderOpen $root^) { $explorerOpen = $true; Start-Sleep -Milliseconds 500; continue }
 >> "%DELETE_PS%" echo         $parent = Split-Path -Parent $root
 >> "%DELETE_PS%" echo         $name = Split-Path -Leaf $root
 >> "%DELETE_PS%" echo         $candidate = Join-Path $parent ^('.' + $name + '.deleting-' + [guid]::NewGuid^(^).ToString^('N'^)^)
 >> "%DELETE_PS%" echo         try { Move-Item -LiteralPath $root -Destination $candidate -ErrorAction Stop; $staged = $candidate; break } catch { Start-Sleep -Milliseconds 500 }
 >> "%DELETE_PS%" echo     }
 >> "%DELETE_PS%" echo     if ^(-not $staged^) {
->> "%DELETE_PS%" echo         if ^($explorerOpen^) { Write-Host '[FAILED] CP setup folder is still open in File Explorer. Close it, then delete it manually.' } else { Write-Host '[FAILED] CP setup folder is still in use. Close terminals opened in it, then delete it manually.' }
+>> "%DELETE_PS%" echo         Write-Host '[FAILED] CP setup folder is still in use. Close terminals opened in it, then delete it manually.'
 >> "%DELETE_PS%" echo         exit 1
 >> "%DELETE_PS%" echo     }
 >> "%DELETE_PS%" echo     for ^($attempt = 0; $attempt -lt 20; $attempt++^) {
