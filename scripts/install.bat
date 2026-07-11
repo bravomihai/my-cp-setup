@@ -8,6 +8,7 @@ set "ORIGINAL_ARGS=%*"
 set "CHECK_ONLY=0"
 set "VERBOSE=0"
 set "MISSING_COUNT=0"
+set "TOOLCHAIN_INSTALLED=0"
 set "STATE_KEY=HKCU\Software\my-cp-setup"
 set "WINGET_ARGS=--exact --source winget --accept-package-agreements --accept-source-agreements --disable-interactivity"
 set "WINGET_QUIET_ARGS=%WINGET_ARGS% --silent"
@@ -70,6 +71,7 @@ if not errorlevel 1 (
     ) else (
         call :install_msys2_toolchain
         if errorlevel 1 goto failed
+        set "TOOLCHAIN_INSTALLED=1"
     )
 )
 
@@ -81,6 +83,7 @@ if errorlevel 1 (
 )
 :skip_gpp_validation
 
+if "%TOOLCHAIN_INSTALLED%"=="1" goto set_python_from_toolchain
 call :find_python
 if errorlevel 1 (
     if "%CHECK_ONLY%"=="1" (
@@ -88,14 +91,12 @@ if errorlevel 1 (
     ) else (
         call :install_msys2_toolchain
         if errorlevel 1 goto failed
-        call :refresh_path
-        call :find_python quiet
-        if errorlevel 1 (
-            echo [%ESC%[31mFAILED%ESC%[0m] Python was installed, but python.exe was not found in known MSYS2 paths.
-            goto failed
-        )
+        set "TOOLCHAIN_INSTALLED=1"
     )
 )
+
+:set_python_from_toolchain
+if "%TOOLCHAIN_INSTALLED%"=="1" for %%I in ("%CP_GPP%") do set "CP_PYTHON=%%~dpIpython.exe"
 
 call :ensure_ruff
 if errorlevel 1 goto failed

@@ -88,7 +88,7 @@ if not errorlevel 1 (
     reg delete "%STATE_KEY%" /f >nul 2>nul
     call :schedule_repo_removal
     if errorlevel 1 goto failed
-    echo [%ESC%[38;5;153mREMOVING%ESC%[0m] CP setup folder after this window closes.
+    echo [%ESC%[38;5;153mREMOVING%ESC%[0m] CP setup folder shortly.
     echo Restart terminals so environment changes are visible everywhere.
     exit /b 0
 )
@@ -714,10 +714,12 @@ exit /b %SPIN_EXIT%
 :schedule_repo_removal
 set "CP_DELETE_ROOT=%ROOT%"
 set "DELETE_CMD=%TEMP%\cp_setup_delete_%RANDOM%_%RANDOM%.cmd"
+cd /d "%TEMP%"
 > "%DELETE_CMD%" echo @echo off
->> "%DELETE_CMD%" echo ping 127.0.0.1 -n 3 ^>nul
->> "%DELETE_CMD%" echo powershell -NoProfile -ExecutionPolicy Bypass -Command "$root=[IO.Path]::GetFullPath($env:CP_DELETE_ROOT); $marker=Join-Path $root 'scripts\install.bat'; if ($root -eq [IO.Path]::GetPathRoot($root) -or -not (Test-Path -LiteralPath $marker)) { exit 1 }; Remove-Item -LiteralPath $root -Recurse -Force"
->> "%DELETE_CMD%" echo del "%%~f0"
+>> "%DELETE_CMD%" echo cd /d "%%TEMP%%"
+>> "%DELETE_CMD%" echo powershell -NoProfile -ExecutionPolicy Bypass -Command "$root=[IO.Path]::GetFullPath($env:CP_DELETE_ROOT); $marker=Join-Path $root 'scripts\install.bat'; if ($root -eq [IO.Path]::GetPathRoot($root) -or -not (Test-Path -LiteralPath $marker)) { exit 1 }; $deleted=$false; for ($i=0; $i -lt 20; $i++) { try { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction Stop; $deleted=$true; break } catch { Start-Sleep -Milliseconds 500 } }; if (-not $deleted) { Write-Host '[FAILED] CP setup folder is still in use. Close terminals opened in it, then delete it manually.'; exit 1 }"
+>> "%DELETE_CMD%" echo set "CP_DELETE_SELF=%%~f0"
+>> "%DELETE_CMD%" echo start "" /b powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Sleep -Milliseconds 500; Remove-Item -LiteralPath $env:CP_DELETE_SELF -Force -ErrorAction SilentlyContinue"
 start "" /b "%ComSpec%" /d /c call "%DELETE_CMD%"
 exit /b %ERRORLEVEL%
 
