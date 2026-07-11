@@ -195,9 +195,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%ELEVATE_PS%"
 set "ELEVATE_EXIT=%ERRORLEVEL%"
 del "%ELEVATE_PS%" >nul 2>nul
 del "%ELEVATE_CMD%" >nul 2>nul
-if exist "%ELEVATE_DELETE_SIGNAL%" cd /d "%TEMP%"
+set "SCHEDULE_EXIT=0"
+if exist "%ELEVATE_DELETE_SIGNAL%" (
+    cd /d "%TEMP%"
+    set "CP_DELETE_SIGNAL="
+    call :schedule_repo_removal
+    set "SCHEDULE_EXIT=!ERRORLEVEL!"
+)
 del "%ELEVATE_DELETE_SIGNAL%" >nul 2>nul
 if not "%ELEVATE_EXIT%"=="0" exit /b 1
+if not "%SCHEDULE_EXIT%"=="0" exit /b 1
 exit /b 2
 
 :check_state
@@ -541,7 +548,7 @@ if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] MSYS2 was not found; the toolchain cannot be removed with pacman.
     exit /b 1
 )
-set "PACMAN_COMMAND=pacman -Rns --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python && (pacman -Rns --noconfirm mingw-w64-x86_64-ruff > /dev/null 2>&1 || true)"
+set "PACMAN_COMMAND=pacman -Qq mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python mingw-w64-x86_64-ruff 2>/dev/null | xargs -r pacman -Rns --noconfirm"
 call :run_pacman_spinner "UNINSTALLING" "UNINSTALLED"
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] pacman toolchain uninstall failed.
@@ -637,7 +644,7 @@ for %%I in ("%MSYS2_SHELL%") do set "MSYS2_BASH=%%~dpIusr\bin\bash.exe"
 if not exist "%MSYS2_BASH%" exit /b 1
 set "PACMAN_CHECKER=%TEMP%\cp_setup_find_pacman_%RANDOM%_%RANDOM%.cmd"
 > "%PACMAN_CHECKER%" echo @echo off
->> "%PACMAN_CHECKER%" echo "%MSYS2_BASH%" -lc "pacman -Q mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python ^> /dev/null 2^>^&1"
+>> "%PACMAN_CHECKER%" echo "%MSYS2_BASH%" -lc "pacman -Qq mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python mingw-w64-x86_64-ruff 2^> /dev/null ^| grep -q ."
 >> "%PACMAN_CHECKER%" echo exit /b %%ERRORLEVEL%%
 set "SEARCH_COMMAND_INPUT=call ""%PACMAN_CHECKER%"""
 call :search_command "MSYS2 CP toolchain" "@env" "PACMAN_TOOLCHAIN"
@@ -761,7 +768,11 @@ exit /b %SPIN_EXIT%
 :schedule_repo_removal
 set "CP_DELETE_ROOT=%ROOT%"
 set "DELETE_CMD=%TEMP%\cp_setup_delete_%RANDOM%_%RANDOM%.cmd"
-if defined CP_DELETE_SIGNAL > "%CP_DELETE_SIGNAL%" echo ready
+if defined CP_DELETE_SIGNAL (
+    > "%CP_DELETE_SIGNAL%" echo ready
+    cd /d "%TEMP%"
+    exit /b 0
+)
 cd /d "%TEMP%"
 > "%DELETE_CMD%" echo @echo off
 >> "%DELETE_CMD%" echo cd /d "%%TEMP%%"
