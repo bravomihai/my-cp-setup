@@ -57,7 +57,7 @@ Expand a source file when it is ready for an online judge:
 
 The generated file is written next to the source as `submit.cpp`, `submit.java`, or `submit.py`. When `clip.exe` is available, it is also copied to the Windows clipboard.
 
-- **C++:** combines the local debug and helper files, then uses the AtCoder expander to inline `atcoder` headers.
+- **C++:** inserts the helper, defines `DISABLE_DEBUG` so `out(...)` is compiled out, then uses the AtCoder expander to inline `atcoder` headers.
 - **Java:** inserts `Cp.java`, removes the local helper import, and changes `DEBUG` to `false`.
 - **Python:** inserts `cp.py`, removes the local helper import, and changes `DEBUG` to `False`.
 
@@ -104,7 +104,7 @@ The local helper libraries deliberately contain only common contest conveniences
 #include <atcoder/all>
 ```
 
-`cp.hpp` provides common aliases, loop/input/output macros, ordered-set aliases, constants, and local debug support. Use normal `cout` for answers. Use `out(...)` for diagnostics: it writes to standard error locally and is compiled out when `ONLINE_JUDGE` is defined.
+`cp.hpp` provides common aliases, loop/input/output macros, ordered-set aliases, constants, and local debug support. Use normal `cout` for answers. Use `out(...)` for diagnostics: it writes to standard error locally and is compiled out when either `DISABLE_DEBUG` or `ONLINE_JUDGE` is defined. The expansion script defines `DISABLE_DEBUG` explicitly; `ONLINE_JUDGE` remains a fallback when unexpanded source is submitted.
 
 ### Java
 

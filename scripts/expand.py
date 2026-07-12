@@ -36,12 +36,11 @@ def copy_to_clipboard(path: Path) -> None:
 
 
 def expand_cpp(source: Path, root: Path) -> Path:
-    debug_lib = root / "libraries" / "cpp" / "my_libraries" / "debug.cpp"
     cp_lib = root / "libraries" / "cpp" / "my_libraries" / "cp.hpp"
     acl = root / "libraries" / "ac-library"
     expander = acl / "expander.py"
 
-    for path in (debug_lib, cp_lib, expander):
+    for path in (cp_lib, expander):
         if not path.exists():
             raise RuntimeError(f"missing required file: {path}")
 
@@ -50,7 +49,7 @@ def expand_cpp(source: Path, root: Path) -> Path:
 
     text = "\n\n".join(
         [
-            debug_lib.read_text(encoding="utf-8"),
+            "#define DISABLE_DEBUG",
             cp_lib.read_text(encoding="utf-8"),
             source.read_text(encoding="utf-8"),
         ]

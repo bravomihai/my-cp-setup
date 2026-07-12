@@ -6,7 +6,7 @@
 #include <ext/pb_ds/assoc_container.hpp>
 #include <ext/pb_ds/tree_policy.hpp>
 
-#ifndef ONLINE_JUDGE
+#if !defined(DISABLE_DEBUG) && !defined(ONLINE_JUDGE)
 #  include "debug.cpp"
 #else
 #  define out(...)
