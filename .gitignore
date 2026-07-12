@@ -13,7 +13,21 @@ __pycache__/
 
 # generated submission files
 submit.cpp
+submit.java
+submit.py
 solve_expand.cpp
+
+# mutable local solutions and test data (keep only the directory structure)
+/workspace/*
+!/workspace/cpp/
+!/workspace/java/
+!/workspace/python/
+/workspace/cpp/*
+/workspace/java/*
+/workspace/python/*
+!/workspace/cpp/.gitkeep
+!/workspace/java/.gitkeep
+!/workspace/python/.gitkeep
 
 # local root workspace files
 /input.txt

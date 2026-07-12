@@ -241,6 +241,12 @@ void out(const T &...args) {
      ...);
     cerr << '\n';
 }
+
+void timer_out(double seconds) {
+    ostringstream formatted;
+    formatted << fixed << setprecision(6) << seconds << 's';
+    cerr << formatted.str() << '\n';
+}
 // redirect input/output general
 void IO() {
     freopen("D:\\studying\\comp_prog\\debug\\input.txt", "r", stdin);

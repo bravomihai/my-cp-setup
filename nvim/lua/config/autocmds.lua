@@ -31,8 +31,8 @@ vim.api.nvim_create_autocmd("BufLeave", {
 
 vim.api.nvim_create_autocmd("FileType", {
     pattern = { "c", "cpp", "java", "python" },
-    callback = function(event)
-        vim.bo[event.buf].wrap = false
+    callback = function()
+        vim.wo.wrap = false
     end,
 })
 

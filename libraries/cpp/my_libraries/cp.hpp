@@ -10,6 +10,7 @@
 #  include "debug.cpp"
 #else
 #  define out(...)
+#  define timer_out(...)
 #endif
 
 template <typename T>

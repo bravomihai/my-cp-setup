@@ -1,8 +1,8 @@
 cp=cd /d "%CP_SETUP_ROOT%"
 cpsetup=cd /d "%CP_SETUP_ROOT%"
-solve_cpp=nvim "%CP_SETUP_ROOT%\template\cpp\solve.cpp"
-solve_java=nvim "%CP_SETUP_ROOT%\template\java\solve.java"
-solve_py=nvim "%CP_SETUP_ROOT%\template\python\solve.py"
+solve_cpp=if not exist "%CP_SETUP_ROOT%\workspace\cpp" mkdir "%CP_SETUP_ROOT%\workspace\cpp" $T if not exist "%CP_SETUP_ROOT%\workspace\cpp\solve.cpp" copy /Y "%CP_SETUP_ROOT%\template\cpp\solve.cpp" "%CP_SETUP_ROOT%\workspace\cpp\solve.cpp" $G nul $T nvim "%CP_SETUP_ROOT%\workspace\cpp\solve.cpp"
+solve_java=if not exist "%CP_SETUP_ROOT%\workspace\java" mkdir "%CP_SETUP_ROOT%\workspace\java" $T if not exist "%CP_SETUP_ROOT%\workspace\java\solve.java" copy /Y "%CP_SETUP_ROOT%\template\java\solve.java" "%CP_SETUP_ROOT%\workspace\java\solve.java" $G nul $T nvim "%CP_SETUP_ROOT%\workspace\java\solve.java"
+solve_py=if not exist "%CP_SETUP_ROOT%\workspace\python" mkdir "%CP_SETUP_ROOT%\workspace\python" $T if not exist "%CP_SETUP_ROOT%\workspace\python\solve.py" copy /Y "%CP_SETUP_ROOT%\template\python\solve.py" "%CP_SETUP_ROOT%\workspace\python\solve.py" $G nul $T nvim "%CP_SETUP_ROOT%\workspace\python\solve.py"
 input=cd /d "%CP_SETUP_ROOT%" && nvim input.txt
 run="%CP_PYTHON%" "%CP_SETUP_ROOT%\scripts\run.py" $*
 expand="%CP_PYTHON%" "%CP_SETUP_ROOT%\scripts\expand.py" $*

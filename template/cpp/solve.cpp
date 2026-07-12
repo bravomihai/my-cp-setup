@@ -21,9 +21,8 @@ int main() {
     int tc = 1; //cin>>tc;
     while(tc--) solve();
     
-    out("\n");
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> elapsed = end - start;
-    out(elapsed.count(), "s");
+    timer_out(elapsed.count());
     return 0;
 }

@@ -8,9 +8,9 @@ For the complete day-to-day workflow, read the [usage guide](docs/usage.md).
 
 - One `scripts\install.bat` installer for Git, Neovim, JDK, MSYS2, the C++ toolchain, Python, and `ac-library`.
 - C++, Java, and Python templates with a small, consistent convenience layer.
-- `scripts\run.py` to compile/run a solution with local input support.
+- `scripts\run.py` to compile/run a solution and verify its output.
 - `scripts\expand.py` to create a standalone submit file and copy it to the clipboard.
-- Neovim mappings for running, creating debug input, expanding submissions, and controlling diagnostics.
+- Neovim mappings for running, editing input/expected output, verifying, expanding submissions, and controlling diagnostics.
 - An interactive uninstaller that removes only setup-managed components and configuration.
 
 ## Quick Start
@@ -46,20 +46,27 @@ Normal installation updates `ac-library`; `--check` only reports whether an upda
 
 ## Daily Workflow
 
-1. Start from `template\cpp\solve.cpp`, `template\java\solve.java`, or `template\python\solve.py`.
-2. Put sample input in `debug\input.txt` beside the source file.
+1. Run `solve_cpp`, `solve_java`, or `solve_py` in a new Command Prompt. The macro creates the language directory if needed, copies its tracked template when `solve.*` is missing, and opens the untracked workspace copy without overwriting an existing solution.
+2. Optionally put sample input in `input.txt` beside the source file with `<leader>i`; without it, the runner reads from the keyboard.
 3. Run the current file from Neovim with `<leader>r`, or call `scripts\run.py` directly.
-4. When the solution is ready, use `<leader>e` or `scripts\expand.py` to generate `submit.cpp`, `submit.java`, or `submit.py` in the same directory.
+4. Put the expected output in `expected.txt` with `<leader>x`, then check it with `<leader>v`.
+5. When the solution is ready, use `<leader>e` or `scripts\expand.py` to generate `submit.cpp`, `submit.java`, or `submit.py` in the same directory.
 
 `<leader>` is `Space`. The most useful CP mappings are:
 
 | Mapping | Action |
 | --- | --- |
 | `<leader>r` | Save and compile/run the current C++, Java, or Python file in a new `cmd.exe` window |
-| `<leader>i` | Create or open `debug\input.txt` beside the current source file |
+| `<leader>v` | Save, run, and verify stdout against `expected.txt` |
+| `<leader>i` / `<leader>I` | Open input / clear and open input |
+| `<leader>x` / `<leader>X` | Open expected output / clear and open expected output |
 | `<leader>e` | Expand the current file and copy `submit.<ext>` to the clipboard |
 | `<leader>E` | Expand the current file and open `submit.<ext>` |
 | `<leader>d` | Toggle diagnostics for the current buffer |
+
+Normal runs keep solution output separate from their status with two blank lines and finish with `[DONE] 0.001234s`. Verification requires `expected.txt`, compares only stdout, reports stderr separately, and uses the same final `DONE` timer. The timer is emitted locally in the same six-decimal format by every template and is disabled in submissions.
+
+Only the `workspace\cpp`, `workspace\java`, and `workspace\python` directory structure is tracked. Their solutions, input, expected output, generated submissions, and all other local contents remain ignored by Git.
 
 See [docs/usage.md](docs/usage.md) for all custom mappings, runner behavior, expansion details, helpers, debugging conventions, and CMD macros.
 
@@ -98,6 +105,7 @@ my-cp-setup
 |-- nvim/                    Neovim configuration
 |-- scripts/                 Installer, uninstaller, runner, expander, CMD macros
 |-- template/                C++, Java, and Python starter files
+|-- workspace/               Tracked language folders; ignored local contents
 |-- AGENTS.md                Guidance for coding agents
 `-- README.md
 ```

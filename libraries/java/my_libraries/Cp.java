@@ -91,6 +91,10 @@ public final class Cp {
         if (DEBUG) err(values);
     }
 
+    public static void timerOut(double seconds) {
+        if (DEBUG) System.err.printf(Locale.US, "%.6fs%n", seconds);
+    }
+
     private static String format(Object value) {
         if (value == null) return "null";
         Class<?> cls = value.getClass();

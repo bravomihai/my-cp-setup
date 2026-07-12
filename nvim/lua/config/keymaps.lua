@@ -23,6 +23,34 @@ local function current_cp_file()
   return file, ext
 end
 
+local function sibling_file(name, clear)
+  local file = vim.fn.expand("%:p")
+  local directory = file ~= "" and vim.fn.fnamemodify(file, ":h") or vim.fn.getcwd()
+  local path = directory .. "\\" .. name
+  vim.cmd("edit " .. vim.fn.fnameescape(path))
+  if clear then
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { "" })
+    vim.bo.modified = true
+    vim.notify(name .. " cleared (use u to undo)")
+    vim.cmd("startinsert")
+  end
+end
+
+local function run_current(verify)
+  local file = current_cp_file()
+  if not file then
+    return
+  end
+
+  vim.cmd("write")
+  local arguments = { python, scripts_dir .. "run.py", "--new-cmd" }
+  if verify then
+    table.insert(arguments, "--verify")
+  end
+  table.insert(arguments, file)
+  vim.fn.system(arguments)
+end
+
 local function expand_for_submission(open_submit)
   local file, ext = current_cp_file()
   if not file then
@@ -48,26 +76,28 @@ end
 
 -- compile & run
 vim.keymap.set("n", "<leader>r", function()
-  local file = current_cp_file()
-  if not file then
-    return
-  end
-
-  vim.cmd("w")
-  local runner = scripts_dir .. "run.py"
-  vim.fn.system({ python, runner, "--new-cmd", file })
+  run_current(false)
 end, { desc = "Run current file" })
 
 vim.keymap.set("n", "<leader>i", function()
-  local file = current_cp_file()
-  if not file then
-    return
-  end
+  sibling_file("input.txt", false)
+end, { desc = "Open input" })
 
-  local debug_dir = vim.fn.fnamemodify(file, ":h") .. "\\debug"
-  vim.fn.mkdir(debug_dir, "p")
-  vim.cmd("edit " .. vim.fn.fnameescape(debug_dir .. "\\input.txt"))
-end, { desc = "Open debug input" })
+vim.keymap.set("n", "<leader>I", function()
+  sibling_file("input.txt", true)
+end, { desc = "Clear and open input" })
+
+vim.keymap.set("n", "<leader>x", function()
+  sibling_file("expected.txt", false)
+end, { desc = "Open expected output" })
+
+vim.keymap.set("n", "<leader>X", function()
+  sibling_file("expected.txt", true)
+end, { desc = "Clear and open expected output" })
+
+vim.keymap.set("n", "<leader>v", function()
+  run_current(true)
+end, { desc = "Verify output" })
 
 -- expand for submission
 vim.keymap.set("n", "<leader>e", function()
@@ -104,8 +134,8 @@ vim.keymap.set("n", "<leader>cr", vim.lsp.buf.rename)
 vim.keymap.set({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action)
 
 vim.keymap.set("n", "<leader>cf", function()
-    vim.lsp.buf.format({ async = false })
-end)
+  require("conform").format({ async = false, lsp_format = "fallback" })
+end, { desc = "Format current buffer" })
 
 -- buffer nav
 vim.keymap.set("n", "<leader><leader>", "<C-^>")

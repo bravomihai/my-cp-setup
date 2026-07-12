@@ -19,7 +19,6 @@ public class solve {
         }
 
         Cp.flush();
-        Cp.out("\n");
-        Cp.out(String.format(java.util.Locale.US, "%.6fs", timer.elapsed()));
+        Cp.timerOut(timer.elapsed());
     }
 }

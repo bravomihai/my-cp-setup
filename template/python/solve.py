@@ -18,8 +18,7 @@ def main():
         solve()
 
     flush()
-    out("\n")
-    out(f"{timer.elapsed():.6f}s")
+    timer_out(timer.elapsed())
 
 
 if __name__ == "__main__":

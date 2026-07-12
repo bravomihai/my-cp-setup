@@ -79,6 +79,11 @@ def out(*values, sep=" ", end="\n"):
         eprint(*values, sep=sep, end=end)
 
 
+def timer_out(seconds):
+    if DEBUG:
+        eprint(f"{seconds:.6f}s")
+
+
 class Timer:
     def __init__(self):
         self.start = time.perf_counter()
