@@ -384,10 +384,19 @@ set "CONFIG_CLEANUP_PS=%TEMP%\cp_setup_config_cleanup_%RANDOM%_%RANDOM%.ps1"
 >> "%CONFIG_CLEANUP_PS%" echo $consoleKey = 'HKCU:\Console'; $console = Get-ItemProperty -Path $consoleKey -Name VirtualTerminalLevel -ErrorAction SilentlyContinue; $consoleHad = ^(Get-ItemProperty -Path $key -Name 'Console.VirtualTerminal.HadValue' -ErrorAction SilentlyContinue^).'Console.VirtualTerminal.HadValue'; if ^($null -ne $console -and $console.VirtualTerminalLevel -eq 1^) { if ^($consoleHad -eq 1^) { $consoleBefore = ^(Get-ItemProperty -Path $key -Name 'Console.VirtualTerminal.Before' -ErrorAction SilentlyContinue^).'Console.VirtualTerminal.Before'; Set-ItemProperty -Path $consoleKey -Name VirtualTerminalLevel -Value $consoleBefore } else { Remove-ItemProperty -Path $consoleKey -Name VirtualTerminalLevel -ErrorAction SilentlyContinue } }
 >> "%CONFIG_CLEANUP_PS%" echo foreach ^($property in @^('Path.Entries','Path.Before','Path.Written','AutoRun.HadValue','AutoRun.Before','AutoRun.Written','Console.VirtualTerminal.HadValue','Console.VirtualTerminal.Before','Config.Managed','Config.MutationStarted','Snapshot.Complete'^)^) { Remove-ItemProperty -Path $key -Name $property -ErrorAction SilentlyContinue }
 >> "%CONFIG_CLEANUP_PS%" echo foreach ^($name in @^('XDG_CONFIG_HOME','CP_SETUP_ROOT','CP_PYTHON','CP_GPP','CP_JAVAC','CP_JAVA'^)^) { foreach ^($suffix in @^('HadValue','Before','Written'^)^) { Remove-ItemProperty -Path $key -Name ^('Env.' + $name + '.' + $suffix^) -ErrorAction SilentlyContinue } }
-powershell -NoProfile -ExecutionPolicy Bypass -File "%CONFIG_CLEANUP_PS%"
+>> "%CONFIG_CLEANUP_PS%" echo exit 0
+set "CONFIG_CLEANUP_LOG=%TEMP%\cp_setup_config_cleanup.log"
+del "%CONFIG_CLEANUP_LOG%" >nul 2>nul
+powershell -NoProfile -ExecutionPolicy Bypass -File "%CONFIG_CLEANUP_PS%" > "%CONFIG_CLEANUP_LOG%" 2>&1
 set "CONFIG_CLEANUP_EXIT=!ERRORLEVEL!"
 del "%CONFIG_CLEANUP_PS%" >nul 2>nul
-exit /b !CONFIG_CLEANUP_EXIT!
+if not "!CONFIG_CLEANUP_EXIT!"=="0" (
+    echo [%ESC%[31mFAILED%ESC%[0m] CP setup configuration cleanup failed.
+    echo Log: !CONFIG_CLEANUP_LOG!
+    exit /b 1
+)
+del "%CONFIG_CLEANUP_LOG%" >nul 2>nul
+exit /b 0
 
 :remove_external_components
 call :state_has "Winget.Git"
@@ -717,7 +726,7 @@ reg delete "%STATE_KEY%" /f >nul 2>nul
 exit /b 0
 
 :remove_nvim_generated_data
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $key='HKCU:\Software\my-cp-setup'; $existed=(Get-ItemProperty -Path $key -Name 'NvimData.Existed' -ErrorAction SilentlyContinue).'NvimData.Existed'; $target=[IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'nvim-data')); $expected=[IO.Path]::GetFullPath($env:LOCALAPPDATA).TrimEnd('\')+'\nvim-data'; if ($existed -eq 0 -and $target -ieq $expected -and (Test-Path -LiteralPath $target)) { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop; $esc=[char]27; Write-Host ('['+$esc+'[38;5;114mREMOVED'+$esc+'[0m] '+$target) }; $jdtlsExisted=(Get-ItemProperty -Path $key -Name 'JdtlsWorkspace.Existed' -ErrorAction SilentlyContinue).'JdtlsWorkspace.Existed'; $jdtls=(Get-ItemProperty -Path $key -Name 'JdtlsWorkspace.Path' -ErrorAction SilentlyContinue).'JdtlsWorkspace.Path'; if ($jdtlsExisted -eq 0 -and $jdtls) { $workspaceRoot=[IO.Path]::GetFullPath((Join-Path $target 'jdtls-workspaces')); $prefix=$workspaceRoot.TrimEnd('\')+'\'; $full=[IO.Path]::GetFullPath($jdtls); if (-not $full.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase) -or (Split-Path -Leaf $full) -notmatch '^cp-[0-9a-f]{16}$') { throw ('Unsafe JDT LS workspace path: '+$full) }; if (Test-Path -LiteralPath $full) { Remove-Item -LiteralPath $full -Recurse -Force -ErrorAction Stop } }; foreach ($name in @('NvimData.Existed','Nvim.BootstrapStarted','Mason.Packages.Before','Mason.Packages','JdtlsWorkspace.Existed','JdtlsWorkspace.Path')) { Remove-ItemProperty -Path $key -Name $name -ErrorAction SilentlyContinue }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $key='HKCU:\Software\my-cp-setup'; $existed=(Get-ItemProperty -Path $key -Name 'NvimData.Existed' -ErrorAction SilentlyContinue).'NvimData.Existed'; $target=[IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'nvim-data')); $expected=[IO.Path]::GetFullPath($env:LOCALAPPDATA).TrimEnd('\')+'\nvim-data'; if ($existed -eq 0 -and $target -ieq $expected -and (Test-Path -LiteralPath $target)) { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop; $esc=[char]27; Write-Host ('['+$esc+'[38;5;114mREMOVED'+$esc+'[0m] '+$target) }; $jdtlsExisted=(Get-ItemProperty -Path $key -Name 'JdtlsWorkspace.Existed' -ErrorAction SilentlyContinue).'JdtlsWorkspace.Existed'; $jdtls=(Get-ItemProperty -Path $key -Name 'JdtlsWorkspace.Path' -ErrorAction SilentlyContinue).'JdtlsWorkspace.Path'; if ($jdtlsExisted -eq 0 -and $jdtls) { $workspaceRoot=[IO.Path]::GetFullPath((Join-Path $target 'jdtls-workspaces')); $prefix=$workspaceRoot.TrimEnd('\')+'\'; $full=[IO.Path]::GetFullPath($jdtls); if (-not $full.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase) -or (Split-Path -Leaf $full) -notmatch '^cp-[0-9a-f]{16}$') { throw ('Unsafe JDT LS workspace path: '+$full) }; if (Test-Path -LiteralPath $full) { Remove-Item -LiteralPath $full -Recurse -Force -ErrorAction Stop } }; foreach ($name in @('NvimData.Existed','Nvim.BootstrapStarted','Mason.Packages.Before','Mason.Packages','JdtlsWorkspace.Existed','JdtlsWorkspace.Path')) { Remove-ItemProperty -Path $key -Name $name -ErrorAction SilentlyContinue }; exit 0"
 exit /b %ERRORLEVEL%
 
 :remove_managed_mason_packages
