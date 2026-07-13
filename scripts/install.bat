@@ -17,6 +17,9 @@ set "MASON_TOOLS=pyright jdtls google-java-format clangd"
 set "PACMAN_PACKAGES_ALLOWED=mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python mingw-w64-x86_64-ruff"
 set "WINGET_ARGS=--exact --source winget --accept-package-agreements --accept-source-agreements --disable-interactivity"
 set "WINGET_QUIET_ARGS=%WINGET_ARGS% --silent"
+set "CP_MASON_BOOTSTRAP="
+set "SPIN_PROGRESS_FILE="
+set "SPIN_TIMEOUT_SECONDS="
 
 call :validate_setup_root
 if errorlevel 1 exit /b 1
@@ -956,7 +959,7 @@ for %%I in ("%MSYS2_SHELL%") do set "MSYS2_BASH=%%~dpIusr\bin\bash.exe"
 if not exist "%MSYS2_BASH%" exit /b 1
 set "PACMAN_MISSING="
 for %%P in (%~1) do (
-    "%MSYS2_BASH%" -lc "pacman -Qq %%P ^>/dev/null 2^>^&1"
+    "%MSYS2_BASH%" -lc "pacman -Qq -- %%P >/dev/null 2>&1"
     if errorlevel 1 set "PACMAN_MISSING=!PACMAN_MISSING! %%P"
 )
 for /F "tokens=*" %%P in ("%PACMAN_MISSING%") do set "PACMAN_MISSING=%%P"
@@ -969,7 +972,7 @@ exit /b %ERRORLEVEL%
 :record_partial_pacman_packages
 set "PACMAN_INSTALLED_NEW="
 for %%P in (%PACMAN_MISSING%) do (
-    "%MSYS2_BASH%" -lc "pacman -Qq -- %%P ^>/dev/null 2^>^&1"
+    "%MSYS2_BASH%" -lc "pacman -Qq -- %%P >/dev/null 2>&1"
     if not errorlevel 1 set "PACMAN_INSTALLED_NEW=!PACMAN_INSTALLED_NEW! %%P"
 )
 set "PACMAN_MISSING=!PACMAN_INSTALLED_NEW!"
@@ -1035,6 +1038,9 @@ set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $hint = $env:SPIN_HINT
 >> "%SPIN_PS%" echo $log = $env:SPIN_LOG
 >> "%SPIN_PS%" echo $cmd = [string]$env:INSTALL_CMD
+>> "%SPIN_PS%" echo $progressFile = $env:SPIN_PROGRESS_FILE
+>> "%SPIN_PS%" echo [int]$timeoutSeconds = 0
+>> "%SPIN_PS%" echo if (-not [int]::TryParse($env:SPIN_TIMEOUT_SECONDS, [ref]$timeoutSeconds) -or $timeoutSeconds -lt 1) { $timeoutSeconds = 0 }
 >> "%SPIN_PS%" echo $wrapper = Join-Path $env:TEMP ('cp_setup_install_' + [guid]::NewGuid().ToString('N') + '.cmd')
 >> "%SPIN_PS%" echo $q = [char]34
 >> "%SPIN_PS%" echo $esc = [char]27
@@ -1043,19 +1049,23 @@ set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $action = '[' + $esc + '[38;5;153m' + $env:SPIN_ACTION + $esc + '[0m]'
 >> "%SPIN_PS%" echo $success = '[' + $esc + '[38;5;114m' + $env:SPIN_SUCCESS + $esc + '[0m]'
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $log,$wrapper -ErrorAction SilentlyContinue
+>> "%SPIN_PS%" echo if ($progressFile) { Remove-Item -LiteralPath $progressFile -ErrorAction SilentlyContinue }
 >> "%SPIN_PS%" echo $runLine = [string]('call ' + $cmd + ' 1^>' + $q + $log + $q + ' 2^>^&1')
 >> "%SPIN_PS%" echo $lines = @('@echo off',$runLine,'exit /b %%ERRORLEVEL%%')
 >> "%SPIN_PS%" echo [IO.File]::WriteAllLines($wrapper, $lines)
->> "%SPIN_PS%" echo $job = Start-Job -ScriptBlock { param($wrapper) ^& $env:ComSpec /d /c call $wrapper; $LASTEXITCODE } -ArgumentList $wrapper
+>> "%SPIN_PS%" echo $arguments = '/d /s /c ""' + $wrapper + '""'
+>> "%SPIN_PS%" echo $process = Start-Process -FilePath $env:ComSpec -ArgumentList $arguments -WindowStyle Hidden -PassThru
 >> "%SPIN_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%SPIN_PS%" echo $i = 0
->> "%SPIN_PS%" echo while ($job.State -eq 'Running') { $text = $action + ' ' + $frames[$i %% $frames.Count] + ' ' + $label; if ($hint) { $text += ' (' + $hint + ')' }; Write-Host -NoNewline ($cr + $clear + $text); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
->> "%SPIN_PS%" echo $jobResult = Receive-Job -Wait $job
->> "%SPIN_PS%" echo Remove-Job $job -Force
->> "%SPIN_PS%" echo $jobItems = @($jobResult)
->> "%SPIN_PS%" echo if ($jobItems.Count -eq 0) { $exitCode = 1 } else { $exitCode = [int]$jobItems[-1] }
+>> "%SPIN_PS%" echo $started = [Diagnostics.Stopwatch]::StartNew()
+>> "%SPIN_PS%" echo $timedOut = $false
+>> "%SPIN_PS%" echo while (-not $process.HasExited) { $detail = $hint; if ($progressFile -and (Test-Path -LiteralPath $progressFile)) { try { $progress = (Get-Content -LiteralPath $progressFile -First 1 -ErrorAction Stop).Trim(); if ($progress) { $detail = $progress } } catch {} }; $text = $action + ' ' + $frames[$i %% $frames.Count] + ' ' + $label; if ($detail) { $text += ' (' + $detail + ')' }; Write-Host -NoNewline ($cr + $clear + $text); [Console]::Out.Flush(); if ($timeoutSeconds -gt 0 -and $started.Elapsed.TotalSeconds -ge $timeoutSeconds) { $timedOut = $true; ^& taskkill.exe /PID $process.Id /T /F ^| Out-Null; if (-not $process.WaitForExit(5000)) { try { $process.Kill() } catch {}; [void]$process.WaitForExit(1000) }; try { ('Timed out after ' + $timeoutSeconds + ' seconds.') ^| Add-Content -LiteralPath $log -ErrorAction Stop } catch {}; break }; Start-Sleep -Milliseconds 100; $i++ }
+>> "%SPIN_PS%" echo if ($timedOut) { $exitCode = 124 } else { $process.WaitForExit(); $exitCode = $process.ExitCode }
+>> "%SPIN_PS%" echo $finalDetail = $null
+>> "%SPIN_PS%" echo if ($progressFile -and (Test-Path -LiteralPath $progressFile)) { try { $finalDetail = (Get-Content -LiteralPath $progressFile -First 1 -ErrorAction Stop).Trim() } catch {} }
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue
->> "%SPIN_PS%" echo if ($exitCode -eq 0) { Write-Host ($cr + $clear + $success + ' ' + $label) } else { Write-Host ($cr + $clear + '[' + $esc + '[31mFAILED' + $esc + '[0m] ' + $label) }
+>> "%SPIN_PS%" echo if ($progressFile) { Remove-Item -LiteralPath $progressFile -ErrorAction SilentlyContinue }
+>> "%SPIN_PS%" echo if ($exitCode -eq 0) { $finalText = $success + ' ' + $label } else { $finalText = '[' + $esc + '[31mFAILED' + $esc + '[0m] ' + $label }; if ($finalDetail) { $finalText += ' (' + $finalDetail + ')' }; Write-Host ($cr + $clear + $finalText)
 >> "%SPIN_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SPIN_PS%"
 set "SPIN_EXIT=%ERRORLEVEL%"
@@ -1249,10 +1259,14 @@ exit /b 0
 :bootstrap_nvim_tools
 call :capture_missing_mason_packages
 if errorlevel 1 exit /b 1
+set "CP_MASON_BOOTSTRAP=1"
 set "INSTALL_CMD="%FOUND_NVIM_PATH%" --headless "+Lazy! restore" +qa"
+set "SPIN_TIMEOUT_SECONDS=600"
 call :run_install_spinner "LazyVim plugins" "this may take a while" "%TEMP%\cp_setup_nvim.log"
 set "LAZY_BOOTSTRAP_EXIT=%ERRORLEVEL%"
+set "SPIN_TIMEOUT_SECONDS="
 if not "%LAZY_BOOTSTRAP_EXIT%"=="0" (
+    set "CP_MASON_BOOTSTRAP="
     call :record_mason_packages
     echo [%ESC%[31mFAILED%ESC%[0m] LazyVim plugin bootstrap failed.
     echo Log: %TEMP%\cp_setup_nvim.log
@@ -1260,25 +1274,135 @@ if not "%LAZY_BOOTSTRAP_EXIT%"=="0" (
 )
 set "MASON_BOOTSTRAP_LUA=%TEMP%\cp_setup_mason_%RANDOM%_%RANDOM%.lua"
 > "%MASON_BOOTSTRAP_LUA%" echo local names = { "pyright", "jdtls", "google-java-format", "clangd" }
->> "%MASON_BOOTSTRAP_LUA%" echo local registry = require("mason-registry")
->> "%MASON_BOOTSTRAP_LUA%" echo local refreshed = false
->> "%MASON_BOOTSTRAP_LUA%" echo registry.refresh(function()
->> "%MASON_BOOTSTRAP_LUA%" echo   for _, name in ipairs(names) do
->> "%MASON_BOOTSTRAP_LUA%" echo     local package = registry.get_package(name)
->> "%MASON_BOOTSTRAP_LUA%" echo     if not package:is_installed() then package:install() end
+>> "%MASON_BOOTSTRAP_LUA%" echo local handles = {}
+>> "%MASON_BOOTSTRAP_LUA%" echo local progress_file = vim.env.SPIN_PROGRESS_FILE
+>> "%MASON_BOOTSTRAP_LUA%" echo local function describe(value)
+>> "%MASON_BOOTSTRAP_LUA%" echo   if type(value) == "string" then return value end
+>> "%MASON_BOOTSTRAP_LUA%" echo   local ok, text = pcall(vim.inspect, value)
+>> "%MASON_BOOTSTRAP_LUA%" echo   return ok and text or tostring(value)
+>> "%MASON_BOOTSTRAP_LUA%" echo end
+>> "%MASON_BOOTSTRAP_LUA%" echo local function write_progress(text)
+>> "%MASON_BOOTSTRAP_LUA%" echo   pcall(vim.api.nvim_out_write, "[MASON " .. text .. "]\n")
+>> "%MASON_BOOTSTRAP_LUA%" echo   if progress_file and progress_file ~= "" then pcall(vim.fn.writefile, { text }, progress_file) end
+>> "%MASON_BOOTSTRAP_LUA%" echo end
+>> "%MASON_BOOTSTRAP_LUA%" echo local function stop_active()
+>> "%MASON_BOOTSTRAP_LUA%" echo   for _, handle in ipairs(handles) do if not handle:is_closed() then pcall(function() handle:terminate() end) end end
+>> "%MASON_BOOTSTRAP_LUA%" echo   vim.wait(5000, function()
+>> "%MASON_BOOTSTRAP_LUA%" echo     for _, handle in ipairs(handles) do if not handle:is_closed() then return false end end
+>> "%MASON_BOOTSTRAP_LUA%" echo     return true
+>> "%MASON_BOOTSTRAP_LUA%" echo   end, 50)
+>> "%MASON_BOOTSTRAP_LUA%" echo end
+>> "%MASON_BOOTSTRAP_LUA%" echo local ok, err = xpcall(function()
+>> "%MASON_BOOTSTRAP_LUA%" echo   local registry = require("mason-registry")
+>> "%MASON_BOOTSTRAP_LUA%" echo   local total, completed, failure = #names, 0, nil
+>> "%MASON_BOOTSTRAP_LUA%" echo   local state = {}
+>> "%MASON_BOOTSTRAP_LUA%" echo   local function report(name, status)
+>> "%MASON_BOOTSTRAP_LUA%" echo     write_progress(("%%d/%%d %%s %%s"):format(completed, total, name, status))
 >> "%MASON_BOOTSTRAP_LUA%" echo   end
->> "%MASON_BOOTSTRAP_LUA%" echo   refreshed = true
->> "%MASON_BOOTSTRAP_LUA%" echo end)
->> "%MASON_BOOTSTRAP_LUA%" echo local complete = vim.wait(300000, function()
->> "%MASON_BOOTSTRAP_LUA%" echo   if not refreshed then return false end
->> "%MASON_BOOTSTRAP_LUA%" echo   for _, name in ipairs(names) do if not registry.get_package(name):is_installed() then return false end end
->> "%MASON_BOOTSTRAP_LUA%" echo   return true
->> "%MASON_BOOTSTRAP_LUA%" echo end, 200)
->> "%MASON_BOOTSTRAP_LUA%" echo if not complete then vim.api.nvim_err_writeln("Timed out installing required Mason tools") vim.cmd("cquit") end
->> "%MASON_BOOTSTRAP_LUA%" echo vim.cmd("qa^!")
+>> "%MASON_BOOTSTRAP_LUA%" echo   local function fail(name, reason)
+>> "%MASON_BOOTSTRAP_LUA%" echo     if failure then return end
+>> "%MASON_BOOTSTRAP_LUA%" echo     failure = name .. ": " .. describe(reason)
+>> "%MASON_BOOTSTRAP_LUA%" echo     if progress_file and progress_file ~= "" then pcall(vim.fn.writefile, { "FAILED " .. name }, progress_file) end
+>> "%MASON_BOOTSTRAP_LUA%" echo     pcall(vim.api.nvim_err_writeln, failure)
+>> "%MASON_BOOTSTRAP_LUA%" echo   end
+>> "%MASON_BOOTSTRAP_LUA%" echo   local function done(name, status)
+>> "%MASON_BOOTSTRAP_LUA%" echo     if state[name] == "done" then return end
+>> "%MASON_BOOTSTRAP_LUA%" echo     state[name] = "done"
+>> "%MASON_BOOTSTRAP_LUA%" echo     completed = completed + 1
+>> "%MASON_BOOTSTRAP_LUA%" echo     report(name, status)
+>> "%MASON_BOOTSTRAP_LUA%" echo   end
+>> "%MASON_BOOTSTRAP_LUA%" echo   local function ready(package)
+>> "%MASON_BOOTSTRAP_LUA%" echo     if package:is_installing() or not package:is_installed() then return false end
+>> "%MASON_BOOTSTRAP_LUA%" echo     local receipt_ok, present = pcall(function() return package:get_receipt():is_present() end)
+>> "%MASON_BOOTSTRAP_LUA%" echo     return receipt_ok and present
+>> "%MASON_BOOTSTRAP_LUA%" echo   end
+>> "%MASON_BOOTSTRAP_LUA%" echo   local start_install
+>> "%MASON_BOOTSTRAP_LUA%" echo   local function install_result(name, package, success, result, forced)
+>> "%MASON_BOOTSTRAP_LUA%" echo     if state[name] == "done" or state[name] == "failed" then return end
+>> "%MASON_BOOTSTRAP_LUA%" echo     if success then done(name, forced and "repaired" or "installed") return end
+>> "%MASON_BOOTSTRAP_LUA%" echo     local message = describe(result)
+>> "%MASON_BOOTSTRAP_LUA%" echo     if not forced and message:lower():find("already linked", 1, true) then
+>> "%MASON_BOOTSTRAP_LUA%" echo       state[name] = "repairing"
+>> "%MASON_BOOTSTRAP_LUA%" echo       report(name, "repairing stale links")
+>> "%MASON_BOOTSTRAP_LUA%" echo       vim.schedule(function() start_install(name, package, true) end)
+>> "%MASON_BOOTSTRAP_LUA%" echo     else
+>> "%MASON_BOOTSTRAP_LUA%" echo       state[name] = "failed"
+>> "%MASON_BOOTSTRAP_LUA%" echo       fail(name, message)
+>> "%MASON_BOOTSTRAP_LUA%" echo     end
+>> "%MASON_BOOTSTRAP_LUA%" echo   end
+>> "%MASON_BOOTSTRAP_LUA%" echo   start_install = function(name, package, forced)
+>> "%MASON_BOOTSTRAP_LUA%" echo     if failure then return end
+>> "%MASON_BOOTSTRAP_LUA%" echo     state[name] = forced and "repairing" or "installing"
+>> "%MASON_BOOTSTRAP_LUA%" echo     if not forced then report(name, "installing") end
+>> "%MASON_BOOTSTRAP_LUA%" echo     local started_ok, handle_or_error = pcall(function()
+>> "%MASON_BOOTSTRAP_LUA%" echo       return package:install({ force = forced }, function(success, result)
+>> "%MASON_BOOTSTRAP_LUA%" echo         vim.schedule(function() install_result(name, package, success, result, forced) end)
+>> "%MASON_BOOTSTRAP_LUA%" echo       end)
+>> "%MASON_BOOTSTRAP_LUA%" echo     end)
+>> "%MASON_BOOTSTRAP_LUA%" echo     if started_ok then handles[#handles + 1] = handle_or_error else state[name] = "failed" fail(name, handle_or_error) end
+>> "%MASON_BOOTSTRAP_LUA%" echo   end
+>> "%MASON_BOOTSTRAP_LUA%" echo   local function watch(name, package)
+>> "%MASON_BOOTSTRAP_LUA%" echo     local event_result = nil
+>> "%MASON_BOOTSTRAP_LUA%" echo     local on_success, on_failed
+>> "%MASON_BOOTSTRAP_LUA%" echo     local function detach()
+>> "%MASON_BOOTSTRAP_LUA%" echo       pcall(function() package:off("install:success", on_success) end)
+>> "%MASON_BOOTSTRAP_LUA%" echo       pcall(function() package:off("install:failed", on_failed) end)
+>> "%MASON_BOOTSTRAP_LUA%" echo     end
+>> "%MASON_BOOTSTRAP_LUA%" echo     on_success = function(receipt)
+>> "%MASON_BOOTSTRAP_LUA%" echo       event_result = { true, receipt }
+>> "%MASON_BOOTSTRAP_LUA%" echo       detach()
+>> "%MASON_BOOTSTRAP_LUA%" echo       vim.schedule(function() install_result(name, package, true, receipt, false) end)
+>> "%MASON_BOOTSTRAP_LUA%" echo     end
+>> "%MASON_BOOTSTRAP_LUA%" echo     on_failed = function(reason)
+>> "%MASON_BOOTSTRAP_LUA%" echo       event_result = { false, reason }
+>> "%MASON_BOOTSTRAP_LUA%" echo       detach()
+>> "%MASON_BOOTSTRAP_LUA%" echo       vim.schedule(function() install_result(name, package, false, reason, false) end)
+>> "%MASON_BOOTSTRAP_LUA%" echo     end
+>> "%MASON_BOOTSTRAP_LUA%" echo     package:once("install:success", on_success)
+>> "%MASON_BOOTSTRAP_LUA%" echo     package:once("install:failed", on_failed)
+>> "%MASON_BOOTSTRAP_LUA%" echo     if package:is_installing() then state[name] = "installing" report(name, "waiting") return end
+>> "%MASON_BOOTSTRAP_LUA%" echo     if event_result then return end
+>> "%MASON_BOOTSTRAP_LUA%" echo     detach()
+>> "%MASON_BOOTSTRAP_LUA%" echo     if ready(package) then done(name, "ready") else start_install(name, package, false) end
+>> "%MASON_BOOTSTRAP_LUA%" echo   end
+>> "%MASON_BOOTSTRAP_LUA%" echo   report("registry", "refreshing")
+>> "%MASON_BOOTSTRAP_LUA%" echo   local refresh_started, refresh_error = pcall(registry.refresh, function(success, result)
+>> "%MASON_BOOTSTRAP_LUA%" echo     vim.schedule(function()
+>> "%MASON_BOOTSTRAP_LUA%" echo       local callback_ok, callback_error = xpcall(function()
+>> "%MASON_BOOTSTRAP_LUA%" echo         if not success then fail("registry refresh", result) return end
+>> "%MASON_BOOTSTRAP_LUA%" echo         for _, name in ipairs(names) do
+>> "%MASON_BOOTSTRAP_LUA%" echo           local found, package = pcall(registry.get_package, name)
+>> "%MASON_BOOTSTRAP_LUA%" echo           if not found then fail(name, package) return end
+>> "%MASON_BOOTSTRAP_LUA%" echo           watch(name, package)
+>> "%MASON_BOOTSTRAP_LUA%" echo         end
+>> "%MASON_BOOTSTRAP_LUA%" echo       end, debug.traceback)
+>> "%MASON_BOOTSTRAP_LUA%" echo       if not callback_ok then fail("registry callback", callback_error) end
+>> "%MASON_BOOTSTRAP_LUA%" echo     end)
+>> "%MASON_BOOTSTRAP_LUA%" echo   end)
+>> "%MASON_BOOTSTRAP_LUA%" echo   if not refresh_started then fail("registry refresh", refresh_error) end
+>> "%MASON_BOOTSTRAP_LUA%" echo   local complete = vim.wait(300000, function() return failure ~= nil or completed == total end, 100)
+>> "%MASON_BOOTSTRAP_LUA%" echo   if not complete then
+>> "%MASON_BOOTSTRAP_LUA%" echo     local pending = {}
+>> "%MASON_BOOTSTRAP_LUA%" echo     for _, name in ipairs(names) do if state[name] ~= "done" then pending[#pending + 1] = name end end
+>> "%MASON_BOOTSTRAP_LUA%" echo     fail("timeout", "pending: " .. table.concat(pending, ", "))
+>> "%MASON_BOOTSTRAP_LUA%" echo   end
+>> "%MASON_BOOTSTRAP_LUA%" echo   if failure then error(failure, 0) end
+>> "%MASON_BOOTSTRAP_LUA%" echo end, debug.traceback)
+>> "%MASON_BOOTSTRAP_LUA%" echo if not ok then
+>> "%MASON_BOOTSTRAP_LUA%" echo   stop_active()
+>> "%MASON_BOOTSTRAP_LUA%" echo   pcall(vim.api.nvim_err_writeln, err)
+>> "%MASON_BOOTSTRAP_LUA%" echo   vim.cmd("cquit")
+>> "%MASON_BOOTSTRAP_LUA%" echo else
+>> "%MASON_BOOTSTRAP_LUA%" echo   vim.cmd("qa^!")
+>> "%MASON_BOOTSTRAP_LUA%" echo end
 set "INSTALL_CMD="%FOUND_NVIM_PATH%" --headless -c "lua dofile([[!MASON_BOOTSTRAP_LUA!]])""
+set "SPIN_PROGRESS_FILE=%TEMP%\cp_setup_mason_progress_%RANDOM%_%RANDOM%.txt"
+set "SPIN_TIMEOUT_SECONDS=330"
 call :run_install_spinner "Neovim language tools" "this may take a while" "%TEMP%\cp_setup_mason.log"
 set "MASON_BOOTSTRAP_EXIT=%ERRORLEVEL%"
+set "SPIN_TIMEOUT_SECONDS="
+set "SPIN_PROGRESS_FILE="
+set "CP_MASON_BOOTSTRAP="
 del "%MASON_BOOTSTRAP_LUA%" >nul 2>nul
 call :record_mason_packages
 set "MASON_RECORD_EXIT=%ERRORLEVEL%"

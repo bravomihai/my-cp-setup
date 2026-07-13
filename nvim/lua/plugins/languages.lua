@@ -80,6 +80,11 @@ return {
     "mason-org/mason.nvim",
     lazy = false,
     opts = function(_, opts)
+      if vim.env.CP_MASON_BOOTSTRAP == "1" then
+        opts.ensure_installed = {}
+        return
+      end
+
       opts.ensure_installed = opts.ensure_installed or {}
       vim.list_extend(opts.ensure_installed, {
         "clangd",

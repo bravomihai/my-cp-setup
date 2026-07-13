@@ -43,6 +43,8 @@ scripts\install.bat --check --verbose
 
 The scripts use only their own prompts and UAC flow; external package operations are silent and non-interactive. Actual installation and uninstallation request administrator rights once when needed, so approve the UAC prompt or enter valid administrator credentials. The read-only `--check` modes do not elevate. Existing tools are accepted when they satisfy the minimum versions: Python 3.10, Neovim 0.11, and both the Java compiler and runtime from JDK 21. The setup also ensures Node.js/npm, Ruff, the C++ toolchain, Pyright, JDT LS, Google Java Format, and clangd. Windows Package Manager (`winget`) is needed only when a missing or outdated winget-managed component must be installed or upgraded.
 
+Neovim bootstrap reports the current language tool as `N/4`, stops immediately when Mason reports an error, and has a hard timeout for both plugin and language-tool phases. A failed phase prints its log path instead of leaving the installer spinner running indefinitely; rerunning the installer can repair a stale Mason launcher left by an interrupted older installation.
+
 The setup adds to User PATH `scripts` plus only the directories of the exact Git, Neovim, Node.js/npm, JDK, C++, Python, and Ruff executables selected by the installer. Rerunning it removes obsolete setup-owned alternative JDK or MSYS2 toolchain directories while preserving unrelated and pre-existing PATH entries.
 
 `ac-library` is fixed to the commit recorded by this repository. A Git clone initializes that exact submodule revision without following the remote branch; a source archive downloads the same pinned revision. `--check` reports a mismatch without changing it.

@@ -22,6 +22,7 @@
 - Capture pre-existing state before changing user configuration or adding packages, then record only components the setup actually created. Uninstall only exact setup-owned components and restore a value only when it still equals the setup-written value.
 - Add to User PATH only `scripts` and directories containing executables the installer has resolved and validated. Remove obsolete setup-owned alternatives during migration without removing pre-existing or user-owned entries.
 - Never remove repository-owned Neovim configuration. Remove generated `nvim-data` in full only when it did not predate setup; otherwise remove only recorded setup-owned Mason packages and the exact setup-created JDT LS workspace.
+- Keep installer-owned Mason bootstrap separate from LazyVim's automatic `ensure_installed` run. Completion must use Mason success/failure callbacks or events rather than package-directory existence, report per-tool progress, fail on refresh/install errors, and retain an external process-tree watchdog.
 
 ## Editing And Validation
 

@@ -210,3 +210,5 @@ scripts\install.bat --check --verbose
 ```
 
 The check expands and compiles temporary copies of all templates without running them, changing the clipboard, or writing generated files into the repository. See the [repository README](../README.md#maintenance) for installation and cleanup behavior.
+
+During a normal installation, the Neovim language-tool spinner shows Mason progress from `0/4` through `4/4`. Registry and package failures stop immediately, while a non-responsive Neovim process is terminated at the phase deadline and the installer prints the relevant log path.
