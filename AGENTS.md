@@ -6,9 +6,10 @@
 - Keep `scripts/install.bat` and `scripts/uninstall.bat` as the only tracked install/uninstall scripts. Do not add installer helpers or alternate entry points.
 - Preserve the installer/uninstaller prompts, options, status labels, and spinner flow unless the user approves a UX change. External package operations must remain silent and non-interactive.
 - Keep exactly one blank line between major installer/uninstaller sections and interactive prompt groups; status and prompt lines belonging to the same group stay adjacent.
-- Initial component detection may report `SEARCHING` followed by `FOUND`; post-install verification must stay silent and report one `INSTALLED` only after package, executable, and integrity checks succeed.
+- Initial component detection may report `SEARCHING` followed by `FOUND`; post-install verification must stay silent and report one `INSTALLED` only after package, executable, and integrity checks succeed. The `ac-library` probe uses `SEARCHING`, then `UP TO DATE` for the pinned tree or `INSTALLING`/`UPDATING` followed by a silently verified terminal status.
 - Keep the tracked templates in `template/`. Under `workspace/`, track only the three language directories through their `.gitkeep` files; never add local solutions or test data to Git.
 - Do not modify the vendored AtCoder Library in `libraries/ac-library`.
+- Source-archive `ac-library` repairs may adopt an exact pinned tree for migration, but must verify a same-volume staging tree before replacement, replace only an empty target or a stale tree matching the recorded setup-managed hash, and retain a rollback copy until the final pinned-tree check passes.
 - Keep `my_libraries` focused on lightweight contest conveniences and align equivalent debug/timer behavior across the three languages where practical.
 - Keep `nvim/lua/plugins/example.lua`; it is an intentionally disabled LazyVim-generated example.
 

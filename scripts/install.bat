@@ -3,6 +3,7 @@ setlocal EnableExtensions DisableDelayedExpansion
 
 for /F "tokens=1 delims=#" %%A in ('"prompt #$E# & echo on & for %%B in (1) do rem"') do set "ESC=%%A"
 for %%I in ("%~dp0..") do set "ROOT=%%~fI"
+set "INSTALL_SCRIPT=%~f0"
 set "ORIGINAL_ARGS=%*"
 
 set "CHECK_ONLY=0"
@@ -20,9 +21,12 @@ set "WINGET_QUIET_ARGS=%WINGET_ARGS% --silent"
 set "CP_MASON_BOOTSTRAP="
 set "PACMAN_DEFER_SUCCESS="
 set "PACMAN_LABEL="
+set "PACMAN_HINT="
 set "SPIN_DEFER_SUCCESS="
 set "SPIN_PROGRESS_FILE="
 set "SPIN_TIMEOUT_SECONDS="
+
+if /i "%~1"=="--internal-ac-library-status" goto internal_ac_library_status
 
 call :validate_setup_root
 if errorlevel 1 exit /b 1
@@ -645,6 +649,10 @@ if "%VERBOSE%"=="1" if not "%~2"=="" (
 echo [%ESC%[38;5;114mINSTALLED%ESC%[0m] %~1
 exit /b 0
 
+:print_success_status
+echo [%ESC%[38;5;114m%~1%ESC%[0m] %~2
+exit /b 0
+
 :print_found_path
 if "%VERBOSE%"=="1" (
     echo [%ESC%[38;5;114mFOUND%ESC%[0m] %~1: %~2
@@ -687,6 +695,10 @@ exit /b 0
 setlocal EnableExtensions EnableDelayedExpansion
 set "SEARCH_LABEL=%~1"
 set "SEARCH_QUIET=%~4"
+set "SEARCH_SUCCESS=%~5"
+if not defined SEARCH_SUCCESS set "SEARCH_SUCCESS=FOUND"
+set "SEARCH_EXPECTED=%~6"
+set "SEARCH_SHOW_ERRORS=%~7"
 if /i "%~2"=="@env" (
     set "SEARCH_COMMAND=!SEARCH_COMMAND_INPUT!"
 ) else (
@@ -698,11 +710,14 @@ set "SEARCH_PS=%TEMP%\cp_setup_search_%RANDOM%_%RANDOM%.ps1"
 >> "%SEARCH_PS%" echo $command = $env:SEARCH_COMMAND
 >> "%SEARCH_PS%" echo $output = $env:SEARCH_RESULT_FILE
 >> "%SEARCH_PS%" echo $quiet = $env:SEARCH_QUIET -ieq 'quiet'
+>> "%SEARCH_PS%" echo $successText = $env:SEARCH_SUCCESS
+>> "%SEARCH_PS%" echo $expected = $env:SEARCH_EXPECTED
+>> "%SEARCH_PS%" echo $showErrors = $env:SEARCH_SHOW_ERRORS -ieq 'show-errors'
 >> "%SEARCH_PS%" echo $esc = [char]27
 >> "%SEARCH_PS%" echo $cr = [char]13
 >> "%SEARCH_PS%" echo $clear = $esc + '[2K'
 >> "%SEARCH_PS%" echo $searching = '[' + $esc + '[38;5;183mSEARCHING' + $esc + '[0m]'
->> "%SEARCH_PS%" echo $found = '[' + $esc + '[38;5;114mFOUND' + $esc + '[0m]'
+>> "%SEARCH_PS%" echo $success = '[' + $esc + '[38;5;114m' + $successText + $esc + '[0m]'
 >> "%SEARCH_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%SEARCH_PS%" echo if ($quiet) { $items = @(^& $env:ComSpec /d /c $command 2^>$null); $exitCode = $LASTEXITCODE } else {
 >> "%SEARCH_PS%" echo     $job = Start-Job -ScriptBlock { param($command) $items = @(^& $env:ComSpec /d /c $command 2^>$null); [pscustomobject]@{ ExitCode = $LASTEXITCODE; Items = $items } } -ArgumentList $command
@@ -714,7 +729,10 @@ set "SEARCH_PS=%TEMP%\cp_setup_search_%RANDOM%_%RANDOM%.ps1"
 >> "%SEARCH_PS%" echo     $exitCode = [int]$result.ExitCode
 >> "%SEARCH_PS%" echo }
 >> "%SEARCH_PS%" echo if ($items.Count) { [IO.File]::WriteAllLines($output,[string[]]$items) } else { [IO.File]::WriteAllText($output,'') }
->> "%SEARCH_PS%" echo if (-not $quiet) { if ($exitCode -eq 0) { $suffix = ''; if ($env:VERBOSE -eq '1' -and $items.Count) { $suffix = ': ' + $items[0] }; Write-Host ($cr + $clear + $found + ' ' + $label + $suffix) } else { Write-Host -NoNewline ($cr + $clear) } }
+>> "%SEARCH_PS%" echo if (-not $quiet) {
+>> "%SEARCH_PS%" echo     $matchesExpected = [string]::IsNullOrEmpty($expected) -or ($items.Count -and $items[0] -ieq $expected)
+>> "%SEARCH_PS%" echo     if ($exitCode -eq 0 -and $matchesExpected) { $suffix = ''; if ($env:VERBOSE -eq '1' -and $items.Count -and [string]::IsNullOrEmpty($expected)) { $suffix = ': ' + $items[0] }; Write-Host ($cr + $clear + $success + ' ' + $label + $suffix) } else { Write-Host -NoNewline ($cr + $clear); if ($exitCode -ne 0 -and $showErrors -and $items.Count) { Write-Host ($items -join [Environment]::NewLine) } }
+>> "%SEARCH_PS%" echo }
 >> "%SEARCH_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SEARCH_PS%"
 set "SEARCH_EXIT=%ERRORLEVEL%"
@@ -724,84 +742,223 @@ del "%SEARCH_PS%" >nul 2>nul
 del "%SEARCH_RESULT_FILE%" >nul 2>nul
 endlocal & set "%~3=%SEARCH_VALUE%" & exit /b %SEARCH_EXIT%
 
-:check_ac_library
+:internal_ac_library_status
+setlocal EnableExtensions EnableDelayedExpansion
+if exist "%ROOT%\.git" (
+    if not defined FOUND_GIT_PATH call :find_git quiet
+    if defined FOUND_GIT_PATH call :git_ready
+)
 call :ac_library_needs_update
+set "AC_LIBRARY_CHECK_EXIT=!ERRORLEVEL!"
+if not "!AC_LIBRARY_CHECK_EXIT!"=="0" (
+    if defined AC_LIBRARY_ERROR echo [%ESC%[31mFAILED%ESC%[0m] !AC_LIBRARY_ERROR!
+    exit /b !AC_LIBRARY_CHECK_EXIT!
+)
+:internal_ac_library_manage
+if /i not "%~2"=="manage" goto internal_ac_library_output
+if /i "!AC_LIBRARY_STATE!"=="MISSING" call :check_empty_acl_target
+if errorlevel 1 (
+    if defined AC_LIBRARY_ERROR echo [%ESC%[31mFAILED%ESC%[0m] !AC_LIBRARY_ERROR!
+    exit /b 1
+)
+if exist "%ROOT%\.git" goto internal_ac_library_output
+if /i "!AC_LIBRARY_STATE!"=="CURRENT" call :record_acl_archive_hash
+if /i "!AC_LIBRARY_STATE!"=="OUTDATED" call :check_managed_acl_archive
+if errorlevel 1 (
+    if defined AC_LIBRARY_ERROR echo [%ESC%[31mFAILED%ESC%[0m] !AC_LIBRARY_ERROR!
+    exit /b 1
+)
+:internal_ac_library_output
+echo !AC_LIBRARY_STATE!
+exit /b 0
+
+:probe_ac_library
+set "SEARCH_COMMAND_INPUT=call "%INSTALL_SCRIPT%" --internal-ac-library-status %~1"
+call :search_command "ac-library" "@env" "AC_LIBRARY_STATE" "" "UP TO DATE" "CURRENT" "show-errors"
+set "AC_LIBRARY_CHECK_EXIT=%ERRORLEVEL%"
+if not "%AC_LIBRARY_CHECK_EXIT%"=="0" exit /b 1
+if /i "%AC_LIBRARY_STATE%"=="CURRENT" exit /b 0
+if /i "%AC_LIBRARY_STATE%"=="OUTDATED" exit /b 0
+if /i "%AC_LIBRARY_STATE%"=="MISSING" exit /b 0
+echo [%ESC%[31mFAILED%ESC%[0m] ac-library inspection returned an invalid state.
+exit /b 1
+
+:check_ac_library
+call :probe_ac_library
 if errorlevel 1 exit /b 1
-if "%AC_LIBRARY_NEEDS_UPDATE%"=="1" call :print_missing "ac-library at pinned commit %ACL_COMMIT%"
+if /i "%AC_LIBRARY_STATE%"=="CURRENT" exit /b 0
+call :print_missing "ac-library at pinned commit %ACL_COMMIT%"
 exit /b 0
 
 :ensure_ac_library
-call :ac_library_needs_update
+call :probe_ac_library manage
 if errorlevel 1 exit /b 1
-if "%AC_LIBRARY_NEEDS_UPDATE%"=="0" exit /b 0
-if exist "%ROOT%\.git" (
-    call :update_ac_library
+if /i "%AC_LIBRARY_STATE%"=="CURRENT" exit /b 0
+if /i "%AC_LIBRARY_STATE%"=="OUTDATED" (
+    set "AC_LIBRARY_ACTION=UPDATING"
+    set "AC_LIBRARY_SUCCESS=UPDATED"
 ) else (
-    call :bootstrap_ac_library_archive
+    set "AC_LIBRARY_ACTION=INSTALLING"
+    set "AC_LIBRARY_SUCCESS=INSTALLED"
 )
-exit /b %ERRORLEVEL%
+if exist "%ROOT%\.git" (
+    call :update_ac_library "!AC_LIBRARY_ACTION!" "!AC_LIBRARY_SUCCESS!"
+) else (
+    call :bootstrap_ac_library_archive "!AC_LIBRARY_ACTION!" "!AC_LIBRARY_SUCCESS!"
+)
+exit /b !ERRORLEVEL!
 
 :ac_library_needs_update
-set "AC_LIBRARY_NEEDS_UPDATE=0"
+set "AC_LIBRARY_ERROR="
+set "AC_LIBRARY_STATE=MISSING"
 set "AC_LIBRARY_PATH=%ROOT%\libraries\ac-library"
-if not exist "%AC_LIBRARY_PATH%\expander.py" (
-    set "AC_LIBRARY_NEEDS_UPDATE=1"
-    exit /b 0
-)
 if not exist "%ROOT%\.git" (
+    if not exist "%AC_LIBRARY_PATH%\expander.py" exit /b 0
+    set "AC_LIBRARY_STATE=OUTDATED"
     call :compute_ac_library_tree_hash "%AC_LIBRARY_PATH%"
-    if errorlevel 1 exit /b 1
-    if /i not "%AC_LIBRARY_TREE_ACTUAL%"=="%ACL_TREE_HASH%" set "AC_LIBRARY_NEEDS_UPDATE=1"
-    exit /b 0
-)
-if not defined FOUND_GIT_PATH exit /b 1
-if not exist "%ROOT%\.gitmodules" exit /b 1
-set "AC_LIBRARY_EXPECTED="
-for /F "tokens=3" %%P in ('git -C "%ROOT%" ls-tree HEAD -- libraries/ac-library 2^>nul') do if not defined AC_LIBRARY_EXPECTED set "AC_LIBRARY_EXPECTED=%%P"
-if not defined AC_LIBRARY_EXPECTED exit /b 1
-if /i not "%AC_LIBRARY_EXPECTED%"=="%ACL_COMMIT%" (
-    echo [%ESC%[31mFAILED%ESC%[0m] install.bat ACL_COMMIT does not match the repository gitlink.
-    exit /b 1
-)
-set "AC_LIBRARY_LOCAL="
-for /F "usebackq delims=" %%P in (`git -C "%AC_LIBRARY_PATH%" rev-parse HEAD 2^>nul`) do if not defined AC_LIBRARY_LOCAL set "AC_LIBRARY_LOCAL=%%P"
-if not defined AC_LIBRARY_LOCAL (
-    set "AC_LIBRARY_NEEDS_UPDATE=1"
-    exit /b 0
-)
-if /i not "%AC_LIBRARY_LOCAL%"=="%AC_LIBRARY_EXPECTED%" set "AC_LIBRARY_NEEDS_UPDATE=1"
-if "%AC_LIBRARY_NEEDS_UPDATE%"=="0" (
-    set "AC_LIBRARY_DIRTY="
-    for /F "usebackq delims=" %%P in (`git -C "%AC_LIBRARY_PATH%" status --porcelain --untracked-files=all 2^>nul`) do if not defined AC_LIBRARY_DIRTY set "AC_LIBRARY_DIRTY=%%P"
-    if defined AC_LIBRARY_DIRTY (
-        echo [%ESC%[31mFAILED%ESC%[0m] ac-library has local changes; restore the pinned submodule before continuing.
+    if errorlevel 1 (
+        set "AC_LIBRARY_ERROR=Could not calculate the ac-library integrity hash."
         exit /b 1
     )
+    if /i not "!AC_LIBRARY_TREE_ACTUAL!"=="!ACL_TREE_HASH!" exit /b 0
+    set "AC_LIBRARY_STATE=CURRENT"
+    exit /b 0
+)
+if not defined FOUND_GIT_PATH (
+    set "AC_LIBRARY_ERROR=Git is unavailable while checking ac-library."
+    exit /b 1
+)
+if not exist "%ROOT%\.gitmodules" (
+    set "AC_LIBRARY_ERROR=.gitmodules is missing while checking ac-library."
+    exit /b 1
+)
+set "AC_LIBRARY_EXPECTED="
+for /F "tokens=3" %%P in ('git -C "%ROOT%" ls-tree HEAD -- libraries/ac-library 2^>nul') do if not defined AC_LIBRARY_EXPECTED set "AC_LIBRARY_EXPECTED=%%P"
+if not defined AC_LIBRARY_EXPECTED (
+    set "AC_LIBRARY_ERROR=The repository does not record an ac-library gitlink."
+    exit /b 1
+)
+if /i not "%AC_LIBRARY_EXPECTED%"=="%ACL_COMMIT%" (
+    set "AC_LIBRARY_ERROR=install.bat ACL_COMMIT does not match the repository gitlink."
+    exit /b 1
+)
+if not exist "%AC_LIBRARY_PATH%\.git" exit /b 0
+if exist "%AC_LIBRARY_PATH%\.git\" exit /b 0
+set "AC_LIBRARY_TOPLEVEL="
+for /F "usebackq delims=" %%P in (`git -C "%AC_LIBRARY_PATH%" rev-parse --show-toplevel 2^>nul`) do if not defined AC_LIBRARY_TOPLEVEL set "AC_LIBRARY_TOPLEVEL=%%P"
+if not defined AC_LIBRARY_TOPLEVEL exit /b 0
+for %%I in ("%AC_LIBRARY_TOPLEVEL%") do set "AC_LIBRARY_TOPLEVEL=%%~fI"
+if /i not "%AC_LIBRARY_TOPLEVEL%"=="%AC_LIBRARY_PATH%" exit /b 0
+set "AC_LIBRARY_SUPERPROJECT="
+for /F "usebackq delims=" %%P in (`git -C "%AC_LIBRARY_PATH%" rev-parse --show-superproject-working-tree 2^>nul`) do if not defined AC_LIBRARY_SUPERPROJECT set "AC_LIBRARY_SUPERPROJECT=%%P"
+if not defined AC_LIBRARY_SUPERPROJECT exit /b 0
+for %%I in ("%AC_LIBRARY_SUPERPROJECT%") do set "AC_LIBRARY_SUPERPROJECT=%%~fI"
+if /i not "%AC_LIBRARY_SUPERPROJECT%"=="%ROOT%" exit /b 0
+set "AC_LIBRARY_LOCAL="
+for /F "usebackq delims=" %%P in (`git -C "%AC_LIBRARY_PATH%" rev-parse HEAD 2^>nul`) do if not defined AC_LIBRARY_LOCAL set "AC_LIBRARY_LOCAL=%%P"
+if not defined AC_LIBRARY_LOCAL exit /b 0
+set "AC_LIBRARY_STATE=OUTDATED"
+set "AC_LIBRARY_STATUS_FILE=%TEMP%\cp_setup_acl_status_%RANDOM%_%RANDOM%.txt"
+git -C "%AC_LIBRARY_PATH%" status --porcelain --untracked-files=all > "%AC_LIBRARY_STATUS_FILE%" 2>nul
+set "AC_LIBRARY_STATUS_EXIT=!ERRORLEVEL!"
+if not "!AC_LIBRARY_STATUS_EXIT!"=="0" (
+    del "%AC_LIBRARY_STATUS_FILE%" >nul 2>nul
+    set "AC_LIBRARY_ERROR=Git could not inspect the ac-library working tree."
+    exit /b 1
+)
+set "AC_LIBRARY_DIRTY="
+for /F "usebackq delims=" %%P in ("%AC_LIBRARY_STATUS_FILE%") do if not defined AC_LIBRARY_DIRTY set "AC_LIBRARY_DIRTY=%%P"
+del "%AC_LIBRARY_STATUS_FILE%" >nul 2>nul
+if defined AC_LIBRARY_DIRTY (
+    set "AC_LIBRARY_ERROR=ac-library has local changes; restore the pinned submodule before continuing."
+    exit /b 1
+)
+if /i not "%AC_LIBRARY_LOCAL%"=="%AC_LIBRARY_EXPECTED%" exit /b 0
+if not exist "%AC_LIBRARY_PATH%\expander.py" (
+    set "AC_LIBRARY_ERROR=The pinned ac-library checkout is incomplete."
+    exit /b 1
+)
+set "AC_LIBRARY_STATE=CURRENT"
+exit /b 0
+
+:record_acl_archive_hash
+if not defined AC_LIBRARY_TREE_ACTUAL (
+    set "AC_LIBRARY_ERROR=Could not record ac-library source-archive ownership without an integrity hash."
+    exit /b 1
+)
+reg add "%STATE_KEY%" /v "Acl.SourceArchive.Hash" /t REG_SZ /d "%AC_LIBRARY_TREE_ACTUAL%" /f >nul 2>nul
+if errorlevel 1 (
+    set "AC_LIBRARY_ERROR=Could not record the setup-managed ac-library source-archive hash."
+    exit /b 1
+)
+exit /b 0
+
+:check_managed_acl_archive
+set "AC_LIBRARY_MANAGED_HASH="
+for /F "tokens=2,*" %%A in ('reg query "%STATE_KEY%" /v "Acl.SourceArchive.Hash" 2^>nul') do if /i "%%A"=="REG_SZ" set "AC_LIBRARY_MANAGED_HASH=%%B"
+if not defined AC_LIBRARY_MANAGED_HASH (
+    set "AC_LIBRARY_ERROR=ac-library is outdated but is not recorded as setup-managed; preserve or remove it manually before continuing."
+    exit /b 1
+)
+if /i not "%AC_LIBRARY_TREE_ACTUAL%"=="%AC_LIBRARY_MANAGED_HASH%" (
+    set "AC_LIBRARY_ERROR=ac-library differs from the setup-managed source archive; restore local changes before updating it."
+    exit /b 1
+)
+exit /b 0
+
+:check_empty_acl_target
+if not exist "%AC_LIBRARY_PATH%" exit /b 0
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$path=$env:AC_LIBRARY_PATH; if (-not (Test-Path -LiteralPath $path -PathType Container)) { exit 1 }; if (@(Get-ChildItem -LiteralPath $path -Force -ErrorAction Stop).Count -ne 0) { exit 1 }; exit 0" >nul 2>nul
+if errorlevel 1 (
+    set "AC_LIBRARY_ERROR=libraries\ac-library exists but is not an empty install target; preserve or remove its contents manually before continuing."
+    exit /b 1
+)
+exit /b 0
+
+:print_ac_library_check_error
+if defined AC_LIBRARY_ERROR (
+    echo [%ESC%[31mFAILED%ESC%[0m] %AC_LIBRARY_ERROR%
+) else (
+    echo [%ESC%[31mFAILED%ESC%[0m] Could not verify ac-library.
 )
 exit /b 0
 
 :update_ac_library
 if not defined FOUND_GIT_PATH exit /b 1
 if not exist "%ROOT%\.gitmodules" exit /b 1
+call :ac_library_needs_update
+if errorlevel 1 (
+    call :print_ac_library_check_error
+    exit /b 1
+)
+if /i "%AC_LIBRARY_STATE%"=="MISSING" call :check_empty_acl_target
+if errorlevel 1 (
+    call :print_ac_library_check_error
+    exit /b 1
+)
+if /i "%AC_LIBRARY_STATE%"=="CURRENT" (
+    echo [%ESC%[31mFAILED%ESC%[0m] ac-library changed before its Git update started; run the installer again.
+    exit /b 1
+)
 set "INSTALL_CMD=git -C "%ROOT%" submodule update --init --checkout libraries/ac-library"
-call :run_install_spinner "ac-library submodule" "" "%TEMP%\cp_setup_git.log" "INSTALLING" "INSTALLED" "1"
+call :run_install_spinner "ac-library" "" "%TEMP%\cp_setup_git.log" "%~1" "%~2" "1"
 set "AC_LIBRARY_EXIT=!ERRORLEVEL!"
 if not "!AC_LIBRARY_EXIT!"=="0" (
-    echo [%ESC%[31mFAILED%ESC%[0m] ac-library submodule update failed.
+    echo [%ESC%[31mFAILED%ESC%[0m] ac-library update via Git submodule failed.
     echo Log: %TEMP%\cp_setup_git.log
     exit /b 1
 )
 call :ac_library_needs_update
 if errorlevel 1 (
-    echo [%ESC%[31mFAILED%ESC%[0m] Could not verify the ac-library submodule after checkout.
+    call :print_ac_library_check_error
     echo Log: %TEMP%\cp_setup_git.log
     exit /b 1
 )
-if "%AC_LIBRARY_NEEDS_UPDATE%"=="1" (
+if /i not "%AC_LIBRARY_STATE%"=="CURRENT" (
     echo [%ESC%[31mFAILED%ESC%[0m] ac-library did not reach the pinned commit after checkout.
     exit /b 1
 )
-call :print_installed "ac-library submodule"
+call :print_success_status "%~2" "ac-library"
 exit /b 0
 
 :check_env_paths
@@ -893,7 +1050,7 @@ call :capture_missing_pacman_packages "%PACMAN_REQUESTED%"
 if errorlevel 1 exit /b 1
 set "PACMAN_MISSING_BEFORE=%PACMAN_MISSING%"
 set "PACMAN_COMMAND=pacman -S --needed --noconfirm %PACMAN_REQUESTED%"
-call :run_pacman_spinner "INSTALLING" "INSTALLED" "MSYS2 toolchain via pacman" "1"
+call :run_pacman_spinner "INSTALLING" "INSTALLED" "MSYS2 toolchain via pacman" "1" "this may take a while"
 if errorlevel 1 (
     set "PACMAN_MISSING=!PACMAN_MISSING_BEFORE!"
     call :record_partial_pacman_packages
@@ -994,51 +1151,167 @@ if not defined AC_LIBRARY_TREE_ACTUAL exit /b 1
 exit /b 0
 
 :bootstrap_ac_library_archive
+set "ACL_STAGE_ROOT=%ROOT%\libraries\.ac-library-stage-%RANDOM%-%RANDOM%"
+set "ACL_STAGE_PATH=%ACL_STAGE_ROOT%\ac-library-%ACL_COMMIT%"
+set "ACL_BACKUP_PATH=%ROOT%\libraries\.ac-library-backup-%RANDOM%-%RANDOM%"
 set "ACL_BOOTSTRAP_PS=%TEMP%\cp_setup_acl_%RANDOM%_%RANDOM%.ps1"
 > "%ACL_BOOTSTRAP_PS%" echo $ErrorActionPreference = 'Stop'
 >> "%ACL_BOOTSTRAP_PS%" echo $ProgressPreference = 'SilentlyContinue'
->> "%ACL_BOOTSTRAP_PS%" echo $root = $env:ROOT
 >> "%ACL_BOOTSTRAP_PS%" echo $commit = $env:ACL_COMMIT
->> "%ACL_BOOTSTRAP_PS%" echo $target = Join-Path $root 'libraries\ac-library'
->> "%ACL_BOOTSTRAP_PS%" echo if ^(Test-Path -LiteralPath $target^) { $items = @^(Get-ChildItem -LiteralPath $target -Force -ErrorAction Stop^); if ^($items.Count^) { throw 'libraries\ac-library exists but is not a complete pinned ACL checkout.' } }
+>> "%ACL_BOOTSTRAP_PS%" echo $stageRoot = $env:ACL_STAGE_ROOT
 >> "%ACL_BOOTSTRAP_PS%" echo $temp = Join-Path $env:TEMP ^('cp_setup_acl_' + [guid]::NewGuid^(^).ToString^('N'^)^)
+>> "%ACL_BOOTSTRAP_PS%" echo $stageCreated = $false
 >> "%ACL_BOOTSTRAP_PS%" echo try {
+>> "%ACL_BOOTSTRAP_PS%" echo     New-Item -ItemType Directory -Path $stageRoot -ErrorAction Stop ^| Out-Null
+>> "%ACL_BOOTSTRAP_PS%" echo     $stageCreated = $true
 >> "%ACL_BOOTSTRAP_PS%" echo     New-Item -ItemType Directory -Path $temp -Force ^| Out-Null
 >> "%ACL_BOOTSTRAP_PS%" echo     $archive = Join-Path $temp 'acl.zip'
 >> "%ACL_BOOTSTRAP_PS%" echo     Invoke-WebRequest -UseBasicParsing -Uri ^('https://github.com/atcoder/ac-library/archive/' + $commit + '.zip'^) -OutFile $archive
->> "%ACL_BOOTSTRAP_PS%" echo     Expand-Archive -LiteralPath $archive -DestinationPath $temp -Force
->> "%ACL_BOOTSTRAP_PS%" echo     $source = Join-Path $temp ^('ac-library-' + $commit^)
->> "%ACL_BOOTSTRAP_PS%" echo     if ^(-not ^(Test-Path -LiteralPath ^(Join-Path $source 'expander.py'^)^)^) { throw 'Pinned ACL archive is incomplete.' }
->> "%ACL_BOOTSTRAP_PS%" echo     if ^(-not ^(Test-Path -LiteralPath $target^)^) { New-Item -ItemType Directory -Path $target -Force ^| Out-Null }
->> "%ACL_BOOTSTRAP_PS%" echo     Get-ChildItem -LiteralPath $source -Force ^| Copy-Item -Destination $target -Recurse -Force
->> "%ACL_BOOTSTRAP_PS%" echo } catch { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue; throw } finally { Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue }
+>> "%ACL_BOOTSTRAP_PS%" echo     Expand-Archive -LiteralPath $archive -DestinationPath $stageRoot -Force
+>> "%ACL_BOOTSTRAP_PS%" echo     if ^(-not ^(Test-Path -LiteralPath ^(Join-Path $env:ACL_STAGE_PATH 'expander.py'^)^)^) { throw 'Pinned ACL archive is incomplete.' }
+>> "%ACL_BOOTSTRAP_PS%" echo } catch { if ^($stageCreated^) { Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue }; throw } finally { Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue }
 set "INSTALL_CMD=powershell -NoProfile -ExecutionPolicy Bypass -File "%ACL_BOOTSTRAP_PS%""
-call :run_install_spinner "ac-library pinned archive" "" "%TEMP%\cp_setup_acl.log" "INSTALLING" "INSTALLED" "1"
+call :run_install_spinner "ac-library" "" "%TEMP%\cp_setup_acl.log" "%~1" "%~2" "1"
 set "ACL_BOOTSTRAP_EXIT=%ERRORLEVEL%"
 del "%ACL_BOOTSTRAP_PS%" >nul 2>nul
 if not "%ACL_BOOTSTRAP_EXIT%"=="0" (
-    echo [%ESC%[31mFAILED%ESC%[0m] ac-library pinned archive bootstrap failed.
+    echo [%ESC%[31mFAILED%ESC%[0m] ac-library source archive download failed.
     echo Log: %TEMP%\cp_setup_acl.log
     exit /b 1
 )
-if not exist "%ROOT%\libraries\ac-library\expander.py" (
+if not exist "%ACL_STAGE_PATH%\expander.py" (
+    call :remove_ac_library_stage
     echo [%ESC%[31mFAILED%ESC%[0m] Downloaded ac-library content is incomplete.
     echo Log: %TEMP%\cp_setup_acl.log
     exit /b 1
 )
-call :compute_ac_library_tree_hash "%ROOT%\libraries\ac-library"
+call :compute_ac_library_tree_hash "%ACL_STAGE_PATH%"
 if errorlevel 1 (
+    call :remove_ac_library_stage
     echo [%ESC%[31mFAILED%ESC%[0m] Could not verify the downloaded ac-library integrity hash.
     echo Log: %TEMP%\cp_setup_acl.log
     exit /b 1
 )
 if /i not "%AC_LIBRARY_TREE_ACTUAL%"=="%ACL_TREE_HASH%" (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Remove-Item -LiteralPath (Join-Path $env:ROOT 'libraries\ac-library') -Recurse -Force -ErrorAction SilentlyContinue"
+    call :remove_ac_library_stage
     echo [%ESC%[31mFAILED%ESC%[0m] Downloaded ac-library content does not match the pinned tree hash.
     exit /b 1
 )
-call :print_installed "ac-library pinned archive"
+
+call :ac_library_needs_update
+if errorlevel 1 (
+    call :remove_ac_library_stage
+    call :print_ac_library_check_error
+    exit /b 1
+)
+if /i "%~1"=="INSTALLING" if /i not "%AC_LIBRARY_STATE%"=="MISSING" (
+    call :remove_ac_library_stage
+    echo [%ESC%[31mFAILED%ESC%[0m] ac-library changed while its source archive was being prepared; run the installer again.
+    exit /b 1
+)
+if /i "%~1"=="UPDATING" if /i not "%AC_LIBRARY_STATE%"=="OUTDATED" (
+    call :remove_ac_library_stage
+    echo [%ESC%[31mFAILED%ESC%[0m] ac-library changed while its source archive was being prepared; run the installer again.
+    exit /b 1
+)
+if /i "%~1"=="INSTALLING" call :check_empty_acl_target
+if /i "%~1"=="UPDATING" call :check_managed_acl_archive
+if errorlevel 1 (
+    call :remove_ac_library_stage
+    call :print_ac_library_check_error
+    exit /b 1
+)
+
+set "ACL_SWAP_PS=%TEMP%\cp_setup_acl_swap_%RANDOM%_%RANDOM%.ps1"
+> "%ACL_SWAP_PS%" echo $ErrorActionPreference = 'Stop'
+>> "%ACL_SWAP_PS%" echo $target = Join-Path $env:ROOT 'libraries\ac-library'
+>> "%ACL_SWAP_PS%" echo $stage = $env:ACL_STAGE_PATH
+>> "%ACL_SWAP_PS%" echo $stageRoot = $env:ACL_STAGE_ROOT
+>> "%ACL_SWAP_PS%" echo $backup = $env:ACL_BACKUP_PATH
+>> "%ACL_SWAP_PS%" echo $oldMoved = $false
+>> "%ACL_SWAP_PS%" echo $newMoved = $false
+>> "%ACL_SWAP_PS%" echo try {
+>> "%ACL_SWAP_PS%" echo     if ^(Test-Path -LiteralPath $backup^) { throw 'The ac-library backup path already exists.' }
+>> "%ACL_SWAP_PS%" echo     if ^(Test-Path -LiteralPath $target^) { [IO.Directory]::Move^($target,$backup^); $oldMoved = $true }
+>> "%ACL_SWAP_PS%" echo     [IO.Directory]::Move^($stage,$target^); $newMoved = $true
+>> "%ACL_SWAP_PS%" echo } catch {
+>> "%ACL_SWAP_PS%" echo     $failure = $_
+>> "%ACL_SWAP_PS%" echo     $rollbackErrors = New-Object 'System.Collections.Generic.List[string]'
+>> "%ACL_SWAP_PS%" echo     if ^($newMoved -and ^(Test-Path -LiteralPath $target^) -and -not ^(Test-Path -LiteralPath $stage^)^) { try { [IO.Directory]::Move^($target,$stage^) } catch { $rollbackErrors.Add^('new target: ' + $_.Exception.Message^) } }
+>> "%ACL_SWAP_PS%" echo     if ^($oldMoved -and ^(Test-Path -LiteralPath $backup^) -and -not ^(Test-Path -LiteralPath $target^)^) { try { [IO.Directory]::Move^($backup,$target^) } catch { $rollbackErrors.Add^('backup: ' + $_.Exception.Message^) } }
+>> "%ACL_SWAP_PS%" echo     if ^($rollbackErrors.Count^) { throw ^('ac-library swap failed and rollback was incomplete. Target: ' + $target + '; backup: ' + $backup + '; staging: ' + $stage + '; ' + ^($rollbackErrors -join '; '^)^) }
+>> "%ACL_SWAP_PS%" echo     Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
+>> "%ACL_SWAP_PS%" echo     throw $failure
+>> "%ACL_SWAP_PS%" echo }
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ACL_SWAP_PS%" >> "%TEMP%\cp_setup_acl.log" 2>&1
+set "ACL_SWAP_EXIT=%ERRORLEVEL%"
+del "%ACL_SWAP_PS%" >nul 2>nul
+if not "%ACL_SWAP_EXIT%"=="0" (
+    echo [%ESC%[31mFAILED%ESC%[0m] Could not replace ac-library safely.
+    echo Log: %TEMP%\cp_setup_acl.log
+    exit /b 1
+)
+
+call :ac_library_needs_update
+set "ACL_FINAL_CHECK_EXIT=%ERRORLEVEL%"
+if not "%ACL_FINAL_CHECK_EXIT%"=="0" goto ac_library_archive_rollback
+if /i not "%AC_LIBRARY_STATE%"=="CURRENT" goto ac_library_archive_rollback
+call :record_acl_archive_hash
+if errorlevel 1 (
+    set "ACL_FINAL_CHECK_EXIT=1"
+    goto ac_library_archive_rollback
+)
+call :discard_ac_library_backup
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] ac-library is current, but its temporary backup could not be removed.
+    echo Backup: %ACL_BACKUP_PATH%
+    exit /b 1
+)
+call :remove_ac_library_stage
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] ac-library is current, but its staging directory could not be removed.
+    echo Staging: %ACL_STAGE_ROOT%
+    exit /b 1
+)
+call :print_success_status "%~2" "ac-library"
 exit /b 0
+
+:ac_library_archive_rollback
+call :rollback_ac_library_archive
+set "ACL_ROLLBACK_EXIT=%ERRORLEVEL%"
+if not "%ACL_ROLLBACK_EXIT%"=="0" (
+    echo [%ESC%[31mFAILED%ESC%[0m] ac-library verification failed and rollback was incomplete.
+    echo Target: %ROOT%\libraries\ac-library
+    echo Backup: %ACL_BACKUP_PATH%
+    echo Staging: %ACL_STAGE_PATH%
+    exit /b 1
+)
+if not "%ACL_FINAL_CHECK_EXIT%"=="0" call :print_ac_library_check_error
+if "%ACL_FINAL_CHECK_EXIT%"=="0" echo [%ESC%[31mFAILED%ESC%[0m] ac-library did not pass the final pinned-tree verification.
+exit /b 1
+
+:remove_ac_library_stage
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root=[IO.Path]::GetFullPath((Join-Path $env:ROOT 'libraries')).TrimEnd('\')+'\'; $path=[IO.Path]::GetFullPath($env:ACL_STAGE_ROOT); if (-not $path.StartsWith($root,[StringComparison]::OrdinalIgnoreCase) -or -not [IO.Path]::GetFileName($path).StartsWith('.ac-library-stage-',[StringComparison]::Ordinal)) { exit 1 }; Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue; if (Test-Path -LiteralPath $path) { exit 1 }; exit 0"
+exit /b %ERRORLEVEL%
+
+:discard_ac_library_backup
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$root=[IO.Path]::GetFullPath((Join-Path $env:ROOT 'libraries')).TrimEnd('\')+'\'; $path=[IO.Path]::GetFullPath($env:ACL_BACKUP_PATH); if (-not $path.StartsWith($root,[StringComparison]::OrdinalIgnoreCase) -or -not [IO.Path]::GetFileName($path).StartsWith('.ac-library-backup-',[StringComparison]::Ordinal)) { exit 1 }; Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue; if (Test-Path -LiteralPath $path) { exit 1 }; exit 0"
+exit /b %ERRORLEVEL%
+
+:rollback_ac_library_archive
+set "ACL_ROLLBACK_PS=%TEMP%\cp_setup_acl_rollback_%RANDOM%_%RANDOM%.ps1"
+> "%ACL_ROLLBACK_PS%" echo $ErrorActionPreference = 'Stop'
+>> "%ACL_ROLLBACK_PS%" echo $target = Join-Path $env:ROOT 'libraries\ac-library'
+>> "%ACL_ROLLBACK_PS%" echo $stage = $env:ACL_STAGE_PATH
+>> "%ACL_ROLLBACK_PS%" echo $stageRoot = $env:ACL_STAGE_ROOT
+>> "%ACL_ROLLBACK_PS%" echo $backup = $env:ACL_BACKUP_PATH
+>> "%ACL_ROLLBACK_PS%" echo if ^(Test-Path -LiteralPath $target^) { if ^(Test-Path -LiteralPath $stage^) { throw 'The rollback staging path already exists.' }; [IO.Directory]::Move^($target,$stage^) }
+>> "%ACL_ROLLBACK_PS%" echo if ^(Test-Path -LiteralPath $backup^) { [IO.Directory]::Move^($backup,$target^) }
+>> "%ACL_ROLLBACK_PS%" echo Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction Stop
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ACL_ROLLBACK_PS%" >> "%TEMP%\cp_setup_acl.log" 2>&1
+set "ACL_ROLLBACK_EXIT=%ERRORLEVEL%"
+del "%ACL_ROLLBACK_PS%" >nul 2>nul
+exit /b %ACL_ROLLBACK_EXIT%
 
 :capture_missing_pacman_packages
 call :find_msys2_shell quiet
@@ -1083,13 +1356,15 @@ set "PACMAN_ACTION=%~1"
 set "PACMAN_SUCCESS=%~2"
 set "PACMAN_LABEL=%~3"
 set "PACMAN_DEFER_SUCCESS=%~4"
+set "PACMAN_HINT=%~5"
 if not defined PACMAN_ACTION set "PACMAN_ACTION=INSTALLING"
 if not defined PACMAN_SUCCESS set "PACMAN_SUCCESS=INSTALLED"
 if not defined PACMAN_LABEL set "PACMAN_LABEL=MSYS2 toolchain via pacman"
 set "SPIN_PS=%TEMP%\cp_setup_pacman_spinner_%RANDOM%_%RANDOM%.ps1"
 > "%SPIN_PS%" echo $ErrorActionPreference = 'Stop'
 >> "%SPIN_PS%" echo $label = $env:PACMAN_LABEL
->> "%SPIN_PS%" echo $hint = 'this may take a while'
+>> "%SPIN_PS%" echo $hint = [string]$env:PACMAN_HINT
+>> "%SPIN_PS%" echo $hintSuffix = if ^([string]::IsNullOrWhiteSpace^($hint^)^) { '' } else { ' ^(' + $hint + '^)' }
 >> "%SPIN_PS%" echo $deferSuccess = $env:PACMAN_DEFER_SUCCESS -eq '1'
 >> "%SPIN_PS%" echo $log = Join-Path $env:TEMP 'cp_setup_pacman.log'
 >> "%SPIN_PS%" echo $wrapper = Join-Path $env:TEMP ('cp_setup_pacman_' + [guid]::NewGuid().ToString('N') + '.cmd')
@@ -1114,7 +1389,7 @@ set "SPIN_PS=%TEMP%\cp_setup_pacman_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $job = Start-Job -ScriptBlock { param($wrapper) ^& $env:ComSpec /d /c call $wrapper; $LASTEXITCODE } -ArgumentList $wrapper
 >> "%SPIN_PS%" echo $frames = @([char]92,'-','/','^|')
 >> "%SPIN_PS%" echo $i = 0
->> "%SPIN_PS%" echo while ($job.State -eq 'Running') { Write-Host -NoNewline ($cr + $clear + $action + ' ' + $frames[$i %% $frames.Count] + ' ' + $label + ' (' + $hint + ')'); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
+>> "%SPIN_PS%" echo while ($job.State -eq 'Running') { Write-Host -NoNewline ($cr + $clear + $action + ' ' + $frames[$i %% $frames.Count] + ' ' + $label + $hintSuffix); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ }
 >> "%SPIN_PS%" echo $jobResult = Receive-Job -Wait $job
 >> "%SPIN_PS%" echo Remove-Job $job -Force
 >> "%SPIN_PS%" echo $jobItems = @($jobResult)

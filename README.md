@@ -47,7 +47,7 @@ Neovim bootstrap reports the current language tool as `N/4`, stops immediately w
 
 The setup adds to User PATH `scripts` plus only the directories of the exact Git, Neovim, Node.js/npm, JDK, C++, Python, and Ruff executables selected by the installer. Rerunning it removes obsolete setup-owned alternative JDK or MSYS2 toolchain directories while preserving unrelated and pre-existing PATH entries.
 
-`ac-library` is fixed to the commit recorded by this repository. A Git clone initializes that exact submodule revision without following the remote branch; a source archive downloads the same pinned revision. `--check` reports a mismatch without changing it.
+`ac-library` is fixed to the commit recorded by this repository. A Git clone initializes that exact submodule revision without following the remote branch; a source archive downloads the same pinned revision. Its initial check reports `UP TO DATE` when the pinned tree is already present. Missing copies are installed and setup-managed stale source-archive copies are updated through a verified staging tree; unknown or locally modified contents are preserved and rejected. Success is reported only after a silent final integrity check. `--check` reports a mismatch without changing it.
 
 Verification uses isolated copies of all three templates in a unique temporary directory and never overwrites repository files or changes the clipboard. A read-only `--check` expands and compiles them without running them; a normal installation also runs each temporary template. The temporary directory is removed afterward.
 
