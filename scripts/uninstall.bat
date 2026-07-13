@@ -436,7 +436,7 @@ if errorlevel 1 (
     call :report_unmanaged_msys2
     goto maybe_pacman
 )
-call :winget_has_package "MSYS2.MSYS2"
+call :has_setup_managed_msys2
 if errorlevel 2 exit /b 1
 if errorlevel 1 (
     call :print_missing "MSYS2"
@@ -513,7 +513,7 @@ if not errorlevel 1 (
 
 call :state_has "Winget.MSYS2"
 if not errorlevel 1 (
-    call :winget_has_package "MSYS2.MSYS2"
+    call :has_setup_managed_msys2
     if errorlevel 2 exit /b 1
     if errorlevel 1 (
         call :print_missing "MSYS2"
@@ -621,30 +621,73 @@ exit /b %ERRORLEVEL%
 call :require_winget
 if errorlevel 1 exit /b 1
 set "UNINSTALL_CMD="%WINGET%" uninstall --id %~2 --exact --source winget --disable-interactivity --silent"
-call :run_command_spinner "%~1" "" "%TEMP%\cp_setup_winget_uninstall.log" "UNINSTALLING" "UNINSTALLED"
+call :run_command_spinner "%~1" "" "%TEMP%\cp_setup_winget_uninstall.log" "UNINSTALLING" "UNINSTALLED" "%~3"
 if not errorlevel 1 exit /b 0
 echo [%ESC%[31mFAILED%ESC%[0m] winget uninstall failed for %~1.
 echo Log: %TEMP%\cp_setup_winget_uninstall.log
 exit /b 1
 
 :uninstall_msys2
+call :load_managed_msys2_root
+if errorlevel 2 exit /b 1
+if errorlevel 1 set "MANAGED_MSYS2_ROOT=C:\msys64"
+
+set "MANAGED_MSYS2_UNINSTALLER=!MANAGED_MSYS2_ROOT!\uninstall.exe"
+if not exist "!MANAGED_MSYS2_UNINSTALLER!" goto uninstall_msys2_winget
+if exist "!MANAGED_MSYS2_UNINSTALLER!\" goto uninstall_msys2_winget
+
+set "UNINSTALL_CMD="!MANAGED_MSYS2_UNINSTALLER!" purge --confirm-command"
+call :run_command_spinner "MSYS2" "" "%TEMP%\cp_setup_msys2_uninstall.log" "UNINSTALLING" "UNINSTALLED" "1"
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] MSYS2 native uninstall failed.
+    echo Log: %TEMP%\cp_setup_msys2_uninstall.log
+    exit /b 1
+)
+goto verify_msys2_uninstall
+
+:uninstall_msys2_winget
+if not defined MANAGED_MSYS2_ROOT set "MANAGED_MSYS2_ROOT=C:\msys64"
 call :winget_has_package "MSYS2.MSYS2"
 if errorlevel 2 exit /b 1
 if errorlevel 1 (
-    echo [%ESC%[31mFAILED%ESC%[0m] Setup-managed MSYS2 is not registered with winget.
+    echo [%ESC%[31mFAILED%ESC%[0m] Setup-managed MSYS2 has no usable native uninstaller and is not registered with winget.
     exit /b 1
 )
-set "MANAGED_MSYS2_SHELL="
-for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "(Get-ItemProperty -Path 'HKCU:\Software\my-cp-setup' -Name 'Winget.MSYS2.Path' -ErrorAction SilentlyContinue).'Winget.MSYS2.Path'"`) do if not defined MANAGED_MSYS2_SHELL set "MANAGED_MSYS2_SHELL=%%P"
-call :uninstall_winget_now "MSYS2" "MSYS2.MSYS2"
+call :uninstall_winget_now "MSYS2" "MSYS2.MSYS2" "1"
 if errorlevel 1 exit /b 1
+
+:verify_msys2_uninstall
 call :verify_msys2_removed
+if errorlevel 1 exit /b 1
+echo [%ESC%[38;5;114mUNINSTALLED%ESC%[0m] MSYS2
+exit /b 0
+
+:has_setup_managed_msys2
+call :load_managed_msys2_root
+if errorlevel 2 exit /b 2
+if errorlevel 1 set "MANAGED_MSYS2_ROOT=C:\msys64"
+if exist "!MANAGED_MSYS2_ROOT!\" exit /b 0
+
+:has_setup_managed_msys2_winget
+call :winget_has_package "MSYS2.MSYS2"
 exit /b %ERRORLEVEL%
 
+:load_managed_msys2_root
+set "MANAGED_MSYS2_ROOT="
+reg query "%STATE_KEY%" /v "Winget.MSYS2.Path" >nul 2>nul
+if errorlevel 1 exit /b 1
+for /F "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$value=(Get-ItemProperty -Path 'HKCU:\Software\my-cp-setup' -Name 'Winget.MSYS2.Path' -ErrorAction SilentlyContinue).'Winget.MSYS2.Path'; if (-not $value) { exit 1 }; try { $full=[IO.Path]::GetFullPath($value) } catch { exit 1 }; $expected=[IO.Path]::GetFullPath('C:\msys64\msys2_shell.cmd'); if ($full -ine $expected -or (Split-Path -Leaf $full) -ine 'msys2_shell.cmd') { exit 1 }; Write-Output (Split-Path -Parent $full)"`) do if not defined MANAGED_MSYS2_ROOT set "MANAGED_MSYS2_ROOT=%%P"
+if defined MANAGED_MSYS2_ROOT exit /b 0
+echo [%ESC%[31mFAILED%ESC%[0m] Setup-managed MSYS2 path metadata is invalid or unsafe.
+exit /b 2
+
 :verify_msys2_removed
-if defined MANAGED_MSYS2_SHELL if exist "%MANAGED_MSYS2_SHELL%" (
-    echo [%ESC%[31mFAILED%ESC%[0m] Setup-managed MSYS2 files remain at %MANAGED_MSYS2_SHELL%
-    exit /b 1
+if defined MANAGED_MSYS2_ROOT (
+    call :wait_for_msys2_root_removal
+    if errorlevel 1 (
+        echo [%ESC%[31mFAILED%ESC%[0m] Setup-managed MSYS2 files remain at !MANAGED_MSYS2_ROOT!
+        exit /b 1
+    )
 )
 call :require_winget
 if errorlevel 1 exit /b 1
@@ -655,6 +698,10 @@ if not errorlevel 1 (
     exit /b 1
 )
 exit /b 0
+
+:wait_for_msys2_root_removal
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$path=$env:MANAGED_MSYS2_ROOT; for ($attempt=0; $attempt -lt 60; $attempt++) { if (-not (Test-Path -LiteralPath $path)) { exit 0 }; Start-Sleep -Milliseconds 500 }; exit 1" >nul 2>nul
+exit /b %ERRORLEVEL%
 
 :uninstall_pacman_toolchain
 if "%ALL_MODE%"=="0" (
@@ -861,6 +908,7 @@ set "SPIN_HINT=%~2"
 set "SPIN_LOG=%~3"
 set "SPIN_ACTION=%~4"
 set "SPIN_SUCCESS=%~5"
+set "SPIN_DEFER_RESULT=%~6"
 set "SPIN_PS=%TEMP%\cp_setup_command_spinner_%RANDOM%_%RANDOM%.ps1"
 > "%SPIN_PS%" echo $ErrorActionPreference = 'Stop'
 >> "%SPIN_PS%" echo $label = $env:SPIN_LABEL
@@ -874,6 +922,7 @@ set "SPIN_PS=%TEMP%\cp_setup_command_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $clear = $esc + '[2K'
 >> "%SPIN_PS%" echo $action = '[' + $esc + '[38;5;153m' + $env:SPIN_ACTION + $esc + '[0m]'
 >> "%SPIN_PS%" echo $success = '[' + $esc + '[38;5;114m' + $env:SPIN_SUCCESS + $esc + '[0m]'
+>> "%SPIN_PS%" echo $deferResult = $env:SPIN_DEFER_RESULT -eq '1'
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $log,$wrapper -ErrorAction SilentlyContinue
 >> "%SPIN_PS%" echo $runLine = [string]('call ' + $cmd + ' 1^>' + $q + $log + $q + ' 2^>^&1')
 >> "%SPIN_PS%" echo $lines = @('@echo off',$runLine,'exit /b %%ERRORLEVEL%%')
@@ -887,7 +936,7 @@ set "SPIN_PS=%TEMP%\cp_setup_command_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $jobItems = @($jobResult)
 >> "%SPIN_PS%" echo if ($jobItems.Count -eq 0) { $exitCode = 1 } else { $exitCode = [int]$jobItems[-1] }
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue
->> "%SPIN_PS%" echo if ($exitCode -eq 0) { Write-Host ($cr + $clear + $success + ' ' + $label) } else { Write-Host ($cr + $clear + '[' + $esc + '[31mFAILED' + $esc + '[0m] ' + $label) }
+>> "%SPIN_PS%" echo if ($deferResult) { Write-Host -NoNewline ($cr + $clear) } elseif ($exitCode -eq 0) { Write-Host ($cr + $clear + $success + ' ' + $label) } else { Write-Host ($cr + $clear + '[' + $esc + '[31mFAILED' + $esc + '[0m] ' + $label) }
 >> "%SPIN_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SPIN_PS%"
 set "SPIN_EXIT=%ERRORLEVEL%"
