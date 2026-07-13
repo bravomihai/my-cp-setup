@@ -6,21 +6,108 @@
 #include <ext/pb_ds/assoc_container.hpp>
 #include <ext/pb_ds/tree_policy.hpp>
 
+template <typename T>
+using oset = __gnu_pbds::tree<T, __gnu_pbds::null_type, std::less<T>, __gnu_pbds::rb_tree_tag, __gnu_pbds::tree_order_statistics_node_update>;
+template <typename T>
+using oset_desc = __gnu_pbds::tree<T, __gnu_pbds::null_type, std::greater<T>, __gnu_pbds::rb_tree_tag, __gnu_pbds::tree_order_statistics_node_update>;
+
+template <typename T, typename Compare = std::less<T>>
+class ordered_multiset {
+    using id_type = std::uint64_t;
+    using key_type = std::pair<T, id_type>;
+
+    struct key_compare {
+        Compare compare{};
+
+        bool operator()(const key_type& lhs, const key_type& rhs) const {
+            if (compare(lhs.first, rhs.first)) return true;
+            if (compare(rhs.first, lhs.first)) return false;
+            return lhs.second < rhs.second;
+        }
+    };
+
+    using tree_type = __gnu_pbds::tree<key_type, __gnu_pbds::null_type, key_compare, __gnu_pbds::rb_tree_tag, __gnu_pbds::tree_order_statistics_node_update>;
+
+    tree_type values_;
+    id_type next_id_ = 0;
+    Compare compare_{};
+
+    bool equivalent(const T& lhs, const T& rhs) const {
+        return !compare_(lhs, rhs) && !compare_(rhs, lhs);
+    }
+
+public:
+    using size_type = std::size_t;
+
+    void insert(const T& value) {
+        values_.insert({value, next_id_++});
+    }
+
+    void insert(T&& value) {
+        values_.insert({std::move(value), next_id_++});
+    }
+
+    bool erase_one(const T& value) {
+        auto it = values_.lower_bound({value, 0});
+        if (it == values_.end() || !equivalent(it->first, value)) return false;
+        values_.erase(*it);
+        return true;
+    }
+
+    size_type erase_all(const T& value) {
+        std::vector<key_type> matches;
+        for (auto it = values_.lower_bound({value, 0}); it != values_.end() && equivalent(it->first, value); ++it) {
+            matches.push_back(*it);
+        }
+        for (const auto& key : matches) values_.erase(key);
+        return matches.size();
+    }
+
+    size_type count(const T& value) const {
+        const auto first = values_.order_of_key({value, 0});
+        const auto last = values_.order_of_key({value, std::numeric_limits<id_type>::max()});
+        return last - first;
+    }
+
+    size_type order_of_key(const T& value) const {
+        return values_.order_of_key({value, 0});
+    }
+
+    std::optional<T> find_by_order(size_type order) const {
+        auto it = values_.find_by_order(order);
+        if (it == values_.end()) return std::nullopt;
+        return it->first;
+    }
+
+    bool contains(const T& value) const {
+        return count(value) != 0;
+    }
+
+    size_type size() const {
+        return values_.size();
+    }
+
+    bool empty() const {
+        return values_.empty();
+    }
+
+    void clear() {
+        values_.clear();
+        next_id_ = 0;
+    }
+};
+
+template <typename T>
+using omset = ordered_multiset<T>;
+template <typename T>
+using omset_desc = ordered_multiset<T, std::greater<T>>;
+
 #if !defined(DISABLE_DEBUG) && !defined(ONLINE_JUDGE)
 #  include "debug.cpp"
 #else
 #  define out(...)
 #  define timer_out(...)
 #endif
-
-template <typename T>
-using oset = __gnu_pbds::tree<T, __gnu_pbds::null_type, std::less<T>, __gnu_pbds::rb_tree_tag, __gnu_pbds::tree_order_statistics_node_update>;
-template <typename T>
-using omset = __gnu_pbds::tree<T, __gnu_pbds::null_type, std::less_equal<T>, __gnu_pbds::rb_tree_tag, __gnu_pbds::tree_order_statistics_node_update>;
-template <typename T>
-using oset_desc = __gnu_pbds::tree<T, __gnu_pbds::null_type, std::greater<T>, __gnu_pbds::rb_tree_tag, __gnu_pbds::tree_order_statistics_node_update>;
-template <typename T>
-using omset_desc = __gnu_pbds::tree<T, __gnu_pbds::null_type, std::greater_equal<T>, __gnu_pbds::rb_tree_tag, __gnu_pbds::tree_order_statistics_node_update>;
 
 using ll = long long;
 using ld = long double;
@@ -42,15 +129,15 @@ constexpr long long INF = std::numeric_limits<long long>::max();
 #define mini(v) *std::min_element(all(v))
 #define maxi(v) *std::max_element(all(v))
 #define mp std::make_pair
-#define eb std::vector::emplace_back
-#define emp std::emplace
-#define pb std::vector::push_back
-#define ppb std::vector::pop_back
+#define eb emplace_back
+#define emp emplace
+#define pb push_back
+#define ppb pop_back
 #define ff first
 #define ss second
 #define bitnr(x) __builtin_popcountll(x)
 #define cnt(v, x) std::count(all(v), (x))
-#define cntnz(v) std::count_if(all(v), [](int x){ return x != 0; })
+#define cntnz(v) std::count_if(all(v), [](const auto& x){ return x != 0; })
 
 // loops
 #define rep(i,a,n) for(int i=(a); i<(n); ++i)  // [a,n)

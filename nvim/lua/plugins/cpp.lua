@@ -9,21 +9,20 @@ end
 
 local gpp = existing_path({
   vim.env.CP_GPP,
+  vim.fn.exepath("g++"),
   "C:/msys64/mingw64/bin/g++.exe",
   "C:/msys64/ucrt64/bin/g++.exe",
-  "D:/software/programming/msys2/mingw64/bin/g++.exe",
-  "D:/software/programming/msys2/ucrt64/bin/g++.exe",
 }) or "g++"
 
-local gpp_dir = vim.fn.fnamemodify(gpp, ":h")
-local clangd_path = table.concat({
-  gpp_dir,
+local clangd_path_parts = {
   "C:/msys64/mingw64/bin",
   "C:/msys64/ucrt64/bin",
-  "D:/software/programming/msys2/mingw64/bin",
-  "D:/software/programming/msys2/ucrt64/bin",
   vim.env.PATH or "",
-}, ";")
+}
+if gpp ~= "g++" then
+  table.insert(clangd_path_parts, 1, vim.fn.fnamemodify(gpp, ":h"))
+end
+local clangd_path = table.concat(clangd_path_parts, ";")
 
 return {
   -- colorscheme
@@ -68,17 +67,6 @@ return {
             PATH = clangd_path,
           },
         },
-      },
-    },
-  },
-
-  -- mason tools
-  {
-    "mason-org/mason.nvim",
-    opts = {
-      ensure_installed = {
-        "clangd",
-        "clang-format",
       },
     },
   },

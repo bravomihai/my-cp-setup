@@ -1,4 +1,3 @@
-# 💤 LazyVim
+# Neovim Configuration
 
-A starter template for [LazyVim](https://github.com/LazyVim/LazyVim).
-Refer to the [documentation](https://lazyvim.github.io/installation) to get started.
+This directory is the repository's LazyVim configuration. The installer points Neovim at it and bootstraps the required plugins and language tools. See the [usage guide](../docs/usage.md#neovim-workflow) for the configured workflow and mappings.

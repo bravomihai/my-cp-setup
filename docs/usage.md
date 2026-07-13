@@ -19,7 +19,7 @@ The `solve_cpp`, `solve_java`, and `solve_py` CMD macros create the correspondin
 - `template\java\solve.java`
 - `template\python\solve.py`
 
-Each template already has a `solve` function, a single-test-case default, fast I/O setup where needed, and a local timing call that consistently writes `0.001234s` with six decimals. Change `tc` only when the problem has multiple test cases.
+Each template already has a `solve` function, a single-test-case default, fast I/O setup where needed, and a local timer that writes seconds with six decimal places, such as `0.001234s`. Change `tc` only when the problem has multiple test cases.
 
 Git tracks an empty placeholder in each language directory so the workspace structure exists after cloning. Every other file below `workspace` is ignored. It intentionally keeps only one mutable solution per language; delete a solution when you want its pristine template recreated. The runner chooses input in this order:
 
@@ -37,9 +37,13 @@ Run from the repository root with the configured Python executable:
 "%CP_PYTHON%" scripts\run.py path\to\solve.py
 ```
 
-For C++, the runner compiles with C++20, `-O2`, `libraries\cpp`, and `libraries\ac-library`, then runs the generated `.exe`. Java classes are compiled into a temporary directory and removed after the run. Python runs with `libraries\python` added to `PYTHONPATH`, so `from my_libraries.cp import *` works from any problem directory.
+For C++, the runner compiles with C++20, `-O2`, `libraries\cpp`, and `libraries\ac-library`. Both the C++ executable and Java classes are built in unique temporary directories and removed after the run. Python runs with `libraries\python` added to `PYTHONPATH`, so `from my_libraries.cp import *` works from any problem directory.
 
-Normal output is followed by two blank lines and the runner status. Any local diagnostics appear immediately before `DONE`:
+The configured `CP_GPP`, `CP_JAVAC`, and `CP_JAVA` paths select the exact C++ compiler, Java compiler, and matching Java runtime found by the installer, even if unrelated older tools appear earlier in the system PATH. Python runs with bytecode generation disabled, so importing the helper does not leave `__pycache__` inside the repository.
+
+The installer adds only the directories containing those selected tools, Git, Neovim, Node.js/npm, and Ruff to User PATH; it does not add every detected JDK or both MSYS2 toolchain variants.
+
+A successful normal run puts two blank lines between solution output and runner status. Any local diagnostics appear immediately before `DONE`:
 
 ```text
 solution output
@@ -54,7 +58,7 @@ Add `--new-cmd` to run in a new `cmd.exe` window:
 "%CP_PYTHON%" scripts\run.py --new-cmd path\to\solve.cpp
 ```
 
-Add `--verify` to compare the program's standard output with `expected.txt` beside the source. `expected.txt` is required; `input.txt` is optional, and without it the program reads interactively from the keyboard. Diagnostics written to standard error are displayed separately and never enter the comparison. The template timer is extracted from stderr and displayed after two blank lines:
+Add `--verify` to compare the program's standard output with `expected.txt` beside the source. `expected.txt` is required; file input is optional, and the program reads interactively when neither `input.txt` nor the legacy fallback exists. Diagnostics written to standard error are displayed separately and never enter the comparison. The template timer is extracted from stderr and displayed after two blank lines:
 
 ```text
 [PASS]
@@ -74,7 +78,7 @@ When diagnostics exist, `[STDERR EMPTY]` becomes `[STDERR]` followed by their co
 +Hello, World!
 ```
 
-Here `-1` and `+1` both refer to line 1 in their respective files; they are not character counts. A line prefixed with `-` came from `expected.txt`, while a line prefixed with `+` came from the program. Line endings, one optional final newline, and trailing whitespace are ignored; line order and internal spaces remain significant. Runtime errors, a missing `expected.txt`, and the five-second timeout have distinct messages.
+Here `-1` and `+1` both refer to line 1 in their respective files; they are not character counts. A line prefixed with `-` came from `expected.txt`, while a line prefixed with `+` came from the program. Line endings, one optional final newline, and trailing whitespace are ignored; line order and internal spaces remain significant. Runtime errors, a missing `expected.txt`, and the five-second timeout have distinct messages. Runtime errors and timeouts stop before comparison and do not print a final `DONE` line. The timeout applies when input comes from a file; interactive verification waits without counting the time spent typing.
 
 ## Submit A Solution
 
@@ -88,11 +92,17 @@ Expand a source file when it is ready for an online judge:
 
 The generated file is written next to the source as `submit.cpp`, `submit.java`, or `submit.py`. When `clip.exe` is available, it is also copied to the Windows clipboard.
 
+Generation is atomic: a failed expansion leaves any previous submit file unchanged. Pass `--no-clipboard` when the generated file should not replace the current clipboard contents.
+
 - **C++:** inserts the helper, defines `DISABLE_DEBUG` so `out(...)` is compiled out, then uses the AtCoder expander to inline `atcoder` headers.
-- **Java:** inserts `Cp.java`, removes the local helper import, and changes `DEBUG` to `false`.
-- **Python:** inserts `cp.py`, removes the local helper import, and changes `DEBUG` to `False`.
+- **Java:** hoists and deduplicates imports, inserts `Cp.java`, removes package/local-helper declarations, changes `DEBUG` to `false`, and renames the top-level public source class and references to its name to `Main`.
+- **Python:** preserves the shebang, encoding cookie, module docstring, and `from __future__` imports before inserting `cp.py`; it removes the local helper import and changes `DEBUG` to `False`.
 
 Do not submit the original file when it depends on `my_libraries`; submit the generated file instead.
+
+For Java, use `import my_libraries.Cp` and qualify helper calls as `Cp.member(...)`. Static imports from `my_libraries.Cp` are rejected explicitly because they cannot remain valid after the helper is inlined into the judge's default package.
+
+For Python, helper imports must be top-level, unaliased `from my_libraries.cp import ...` statements. Qualified, aliased, or nested helper imports are rejected explicitly so a failed expansion cannot produce a broken submission.
 
 ## Neovim Workflow
 
@@ -107,7 +117,7 @@ Do not submit the original file when it depends on `my_libraries`; submit the ge
 | `<leader>x` | Create or open `expected.txt` beside the current file |
 | `<leader>X` | Clear and open `expected.txt` (undo is available before saving) |
 | `<leader>e` | Save, expand, and copy `submit.<ext>` to the clipboard |
-| `<leader>E` | Save, expand, and open `submit.<ext>` |
+| `<leader>E` | Save and expand as above, then open `submit.<ext>` |
 | `<leader>d` | Enable or disable diagnostics for the current buffer |
 
 Other custom editing mappings:
@@ -124,13 +134,11 @@ Other custom editing mappings:
 | `<leader><leader>` | Switch to the previously used buffer |
 | `<leader>n` / `<leader>p` | Next / previous buffer |
 
-Formatting depends on a formatter being available for that language. The configuration also keeps persistent undo, reserves the diagnostic sign column, uses an 8-line scroll offset, and disables soft wrapping for C, C++, Java, and Python buffers.
+Saving supported source files formats them first when the formatter is available: Ruff for Python, Google Java Format for Java, and the language server for C/C++. `<leader>cf` triggers formatting manually. Completion popups are intentionally disabled, while LSP navigation and code actions remain available. The configuration also keeps persistent undo, reserves the diagnostic sign column, uses an 8-line scroll offset, and disables soft wrapping for C, C++, Java, and Python buffers. Leaving a buffer autosaves only C++, Java, Python, `input.txt`, and `expected.txt` files.
 
-Saving a Python or Java buffer also runs a syntax check without executing the solution. Python uses Ruff in syntax-only mode, while Java uses `javac` with the local helper library and writes generated classes to Neovim's cache. Errors appear as inline diagnostics on the relevant line and can be hidden or restored with `<leader>d`. Pyright and JDT LS provide hover, definition, reference, rename, and code-action support for Python and Java.
+Saving a Python or Java buffer also runs a syntax check without executing the solution. Python uses Ruff in syntax-only mode, while Java uses `javac` with the local helper library and writes generated classes to a unique temporary cache directory that is cleaned after each check. Errors appear as inline diagnostics on the relevant line and can be hidden or restored with `<leader>d`. Pyright and JDT LS provide hover, definition, reference, rename, and code-action support for Python and Java.
 
 ## Templates And Helpers
-
-The local helper libraries deliberately contain only common contest conveniences. Keep larger algorithms and data structures in problem code or a separate library.
 
 ### C++
 
@@ -141,7 +149,9 @@ The local helper libraries deliberately contain only common contest conveniences
 #include <atcoder/all>
 ```
 
-`cp.hpp` provides common aliases, loop/input/output macros, ordered-set aliases, constants, and local debug support. Use normal `cout` for answers. Use `out(...)` for diagnostics: it writes to standard error locally and is compiled out when either `DISABLE_DEBUG` or `ONLINE_JUDGE` is defined. The expansion script defines `DISABLE_DEBUG` explicitly; `ONLINE_JUDGE` remains a fallback when unexpanded source is submitted.
+`cp.hpp` provides common aliases, loop/input/output macros, ordered sets, constants, and local debug support. Use normal `cout` for answers. Use `out(...)` for diagnostics: it writes to standard error locally and is compiled out when either `DISABLE_DEBUG` or `ONLINE_JUDGE` is defined. The expansion script defines `DISABLE_DEBUG` explicitly; `ONLINE_JUDGE` remains a fallback when unexpanded source is submitted.
+
+`oset<T>` and `oset_desc<T>` are unique-value PBDS trees. `omset<T>` and `omset_desc<T>` are duplicate-safe wrappers backed by `(value, unique_id)` keys and provide `insert`, `erase_one`, `erase_all`, `count`, `contains`, `order_of_key`, `find_by_order`, `size`, `empty`, and `clear`. `find_by_order` returns `std::optional<T>`; for descending sets, order zero is the largest value.
 
 ### Java
 
@@ -163,17 +173,11 @@ Keep the public class name aligned with the source filename when changing the te
 - `out(...)` or `eprint(...)` for diagnostics on standard error.
 - `yn(...)`, `min3(...)`, `max3(...)`, `inside(...)`, `Timer`, and common constants.
 
-`out(...)` is enabled during local work. `timer_out(...)` in Python and C++, plus `Cp.timerOut(...)` in Java, provide the templates' consistent six-decimal timing line. Expansion disables these local diagnostics automatically in the generated submit file.
+`out(...)` and `eprint(...)` are enabled only during local Python work. `Cp.out(...)` and `Cp.err(...)` follow the same rule in Java. `timer_out(...)` in Python and C++, plus `Cp.timerOut(...)` in Java, provide the templates' consistent six-decimal timing line. Expansion disables all these local diagnostics automatically in the generated submit file.
 
 ## Debugging Conventions
 
-Keep answer output separate from diagnostics:
-
-- C++: `cout` for answers and `out(...)` for debug information.
-- Java: `Cp.print` / `Cp.println` plus `Cp.flush()` for answers, and `Cp.out(...)` for debug information.
-- Python: `print_` / `print_iter` plus `flush()` for answers, and `out(...)` or `eprint(...)` for debug information.
-
-The templates print elapsed time as `0.001234s` through the debug channel after producing normal output. This helps local testing without contaminating standard output.
+Keep answers on standard output and diagnostics on standard error: use `cout` / `out(...)` in C++, `Cp.print` or `Cp.println` / `Cp.out(...)` in Java, and `print_` or `print_iter` / `out(...)` or `eprint(...)` in Python. Flush the buffered Java and Python answer output before timing. The templates print elapsed time through the debug channel, so neither diagnostics nor timers contaminate judged output.
 
 ## CMD Macros
 
@@ -185,13 +189,13 @@ The installer configures new `cmd.exe` windows to load `scripts\cp_macros`. Open
 | `solve_cpp` | Create if needed and open `workspace\cpp\solve.cpp` |
 | `solve_java` | Create if needed and open `workspace\java\solve.java` |
 | `solve_py` | Create if needed and open `workspace\python\solve.py` |
-| `input` | Open `<setup-root>\input.txt` in Neovim |
+| `input` | Open the legacy root-level `input.txt` in Neovim |
 | `run <file>` | Call `scripts\run.py` for a source file |
 | `expand <file>` | Call `scripts\expand.py` for a source file |
 
 The `run` and `expand` macros use `CP_PYTHON`, so they avoid the Microsoft Store Python alias.
 
-## Verify And Maintain
+## Verify The Setup
 
 Check that the full setup works without making changes:
 
@@ -199,4 +203,10 @@ Check that the full setup works without making changes:
 scripts\install.bat --check
 ```
 
-Use `scripts\install.bat --verbose` during a normal install when you need the exact paths of resolved tools. For cleanup, use `scripts\uninstall.bat` interactively, `scripts\uninstall.bat --all` for setup-managed components and configuration, or `scripts\uninstall.bat --check` for a dry check.
+Add `--verbose` to the check when you need the exact resolved tool and PATH locations:
+
+```bat
+scripts\install.bat --check --verbose
+```
+
+The check expands and compiles temporary copies of all templates without running them, changing the clipboard, or writing generated files into the repository. See the [repository README](../README.md#maintenance) for installation and cleanup behavior.

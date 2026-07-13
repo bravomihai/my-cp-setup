@@ -6,8 +6,8 @@ vim.g.mapleader = " "
 -- exit insert
 vim.keymap.set("i", "jj", "<Esc>")
 
-local setup_root = vim.fn.fnamemodify(vim.fn.stdpath("config"), ":h")
-local scripts_dir = setup_root .. "\\scripts\\"
+local cp = require("config.cp")
+local scripts_dir = cp.path("scripts")
 local python = vim.env.CP_PYTHON or "python"
 local cp_extensions = { cpp = true, java = true, py = true }
 
@@ -43,7 +43,7 @@ local function run_current(verify)
   end
 
   vim.cmd("write")
-  local arguments = { python, scripts_dir .. "run.py", "--new-cmd" }
+  local arguments = { python, vim.fs.joinpath(scripts_dir, "run.py"), "--new-cmd" }
   if verify then
     table.insert(arguments, "--verify")
   end
@@ -58,7 +58,7 @@ local function expand_for_submission(open_submit)
   end
 
   vim.cmd("write")
-  local expander = scripts_dir .. "expand.py"
+  local expander = vim.fs.joinpath(scripts_dir, "expand.py")
   local out = vim.fn.system({ python, expander, file })
 
   if vim.v.shell_error ~= 0 then
@@ -115,11 +115,11 @@ vim.keymap.set("n", "<leader>d", function()
   end
 
   if enabled then
-    vim.diagnostic.disable(0)
+    vim.diagnostic.enable(false, { bufnr = 0 })
     vim.b.cp_diagnostics_enabled = false
     vim.notify("Diagnostics disabled")
   else
-    vim.diagnostic.enable(0)
+    vim.diagnostic.enable(true, { bufnr = 0 })
     vim.b.cp_diagnostics_enabled = true
     vim.notify("Diagnostics enabled")
   end

@@ -8,35 +8,38 @@
 -- e.g. vim.api.nvim_del_augroup_by_name("lazyvim_wrap_spell")
 -- auto format
 vim.api.nvim_create_autocmd("BufWritePre", {
-    pattern = { "*.cpp", "*.h", "*.hpp", "*.c", "*.py", "*.java" },
-    callback = function()
-        if vim.bo.filetype == "python" or vim.bo.filetype == "java" then
-            local ok, conform = pcall(require, "conform")
-            if ok then
-                conform.format({ async = false })
-            end
-        else
-            vim.lsp.buf.format({ async = false })
-        end
-    end,
+  pattern = { "*.cpp", "*.h", "*.hpp", "*.c", "*.py", "*.java" },
+  callback = function()
+    if vim.bo.filetype == "python" or vim.bo.filetype == "java" then
+      local ok, conform = pcall(require, "conform")
+      if ok then
+        conform.format({ async = false })
+      end
+    else
+      vim.lsp.buf.format({ async = false })
+    end
+  end,
 })
 
 vim.api.nvim_create_autocmd("BufLeave", {
-    callback = function()
-        if vim.bo.modified then
-            vim.cmd("write")
-        end
-    end,
+  pattern = { "*.cpp", "*.java", "*.py", "input.txt", "expected.txt" },
+  callback = function(event)
+    if vim.bo[event.buf].modified then
+      vim.api.nvim_buf_call(event.buf, function()
+        vim.cmd("write")
+      end)
+    end
+  end,
 })
 
 vim.api.nvim_create_autocmd("FileType", {
-    pattern = { "c", "cpp", "java", "python" },
-    callback = function()
-        vim.wo.wrap = false
-    end,
+  pattern = { "c", "cpp", "java", "python" },
+  callback = function()
+    vim.wo.wrap = false
+  end,
 })
 
 vim.diagnostic.config({
-    virtual_text = true,
-    float = { border = "rounded" },
+  virtual_text = true,
+  float = { border = "rounded" },
 })

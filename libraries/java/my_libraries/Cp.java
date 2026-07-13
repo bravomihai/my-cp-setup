@@ -1,6 +1,7 @@
 package my_libraries;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public final class Cp {
@@ -80,6 +81,7 @@ public final class Cp {
     }
 
     public static void err(Object... values) {
+        if (!DEBUG) return;
         for (int i = 0; i < values.length; i++) {
             if (i > 0) System.err.print(' ');
             System.err.print(format(values[i]));
@@ -88,7 +90,7 @@ public final class Cp {
     }
 
     public static void out(Object... values) {
-        if (DEBUG) err(values);
+        err(values);
     }
 
     public static void timerOut(double seconds) {
@@ -133,20 +135,20 @@ public final class Cp {
                 ptr = 0;
                 if (len <= 0) return -1;
             }
-            return buffer[ptr++];
+            return buffer[ptr++] & 0xff;
         }
 
         public String next() throws IOException {
-            StringBuilder s = new StringBuilder();
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             int c;
             do {
                 c = read();
             } while (c <= ' ' && c != -1);
             while (c > ' ') {
-                s.append((char)c);
+                bytes.write(c);
                 c = read();
             }
-            return s.toString();
+            return bytes.toString(StandardCharsets.UTF_8);
         }
 
         public int nextInt() throws IOException {

@@ -1,13 +1,6 @@
 #pragma once
 #include <bits/stdc++.h>
-#include <ext/pb_ds/assoc_container.hpp>
-#include <ext/pb_ds/tree_policy.hpp>
 using namespace std;
-using namespace __gnu_pbds;
-template <typename T>
-using oset = tree<T, null_type, less<T>, rb_tree_tag, tree_order_statistics_node_update>;
-template <typename T>
-using omset = tree<T, null_type, less_equal<T>, rb_tree_tag, tree_order_statistics_node_update>;
 // forward declarations
 template <typename T>
 ostream &print(ostream &os, T val);
@@ -51,8 +44,8 @@ ostream &operator<<(ostream &os, const unordered_map<K, V> &m);
 template <typename T>
 ostream &operator<<(ostream &os, const oset<T> &s);
 
-template <typename T>
-ostream &operator<<(ostream &os, const omset<T> &s);
+template <typename T, typename Compare>
+ostream &operator<<(ostream &os, const ordered_multiset<T, Compare> &s);
 
 template <typename T>
 ostream &operator<<(ostream &os, stack<T> s);
@@ -162,9 +155,14 @@ ostream &operator<<(ostream &os, const oset<T> &s) {
     return print_iterable(os, s, "{", "}");
 }
 
-template <typename T>
-ostream &operator<<(ostream &os, const omset<T> &s) {
-    return print_iterable(os, s, "{", "}");
+template <typename T, typename Compare>
+ostream &operator<<(ostream &os, const ordered_multiset<T, Compare> &s) {
+    os << "{";
+    for (size_t i = 0; i < s.size(); ++i) {
+        print(os, *s.find_by_order(i));
+        if (i + 1 < s.size()) os << ", ";
+    }
+    return os << "}\n";
 }
 
 // print stack
@@ -246,9 +244,4 @@ void timer_out(double seconds) {
     ostringstream formatted;
     formatted << fixed << setprecision(6) << seconds << 's';
     cerr << formatted.str() << '\n';
-}
-// redirect input/output general
-void IO() {
-    freopen("D:\\studying\\comp_prog\\debug\\input.txt", "r", stdin);
-    // freopen("D:\\studying\\comp_prog\\debug\\output.txt", "w", stdout);
 }

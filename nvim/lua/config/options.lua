@@ -10,9 +10,9 @@ vim.opt.clipboard = "unnamedplus"
 
 vim.opt.list = true
 vim.opt.listchars = {
-    tab = "» ",
-    trail = "·",
-    nbsp = "␣",
+  tab = "» ",
+  trail = "·",
+  nbsp = "␣",
 }
 
 vim.opt.cursorline = true

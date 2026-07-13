@@ -1,9 +1,7 @@
 import argparse
 import difflib
 import os
-import random
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,6 +15,11 @@ YELLOW = "\033[33m"
 RESET = "\033[0m"
 VERIFY_TIMEOUT_SECONDS = 5
 TIMER_LINE = re.compile(r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*s")
+
+
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(errors="backslashreplace")
 
 
 def done(timer: str | None = None) -> None:
@@ -58,21 +61,30 @@ def open_new_cmd(source: Path, verify: bool = False) -> int:
 def selected_input(source: Path) -> Path | None:
     debug_input = source.parent / "debug" / "input.txt"
     local_input = source.parent / "input.txt"
-    if local_input.exists():
-        return local_input
-    if debug_input.exists():
-        return debug_input
+    for path in (local_input, debug_input):
+        if path.is_file():
+            return path
+        if path.exists():
+            raise IsADirectoryError(f"Input path is not a file: {path}")
     return None
 
 
 def normalized_lines(data: bytes) -> list[str]:
     text = (
-        data.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+        data.decode("utf-8", errors="surrogateescape")
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
     )
     lines = text.split("\n")
     if lines and lines[-1] == "":
         lines.pop()
     return [line.rstrip() for line in lines]
+
+
+def safe_display(text: str) -> str:
+    return text.encode("utf-8", errors="surrogateescape").decode(
+        "utf-8", errors="backslashreplace"
+    )
 
 
 def first_difference(expected: list[str], actual: list[str]) -> tuple[int, int]:
@@ -152,7 +164,7 @@ def verify_result(
         if index >= 40:
             print("... diff truncated ...")
             break
-        print(diff_line)
+        print(safe_display(diff_line))
     timer = show_stderr()
     print("\n")
     done(timer)
@@ -173,7 +185,6 @@ def capture_command(
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=VERIFY_TIMEOUT_SECONDS,
             )
         with input_path.open("rb") as stdin:
             return subprocess.run(
@@ -222,56 +233,64 @@ def finish_run(result: subprocess.CompletedProcess[bytes]) -> int:
 def run_cpp(
     source: Path, root: Path, input_path: Path | None, expected_path: Path | None = None
 ) -> int:
-    exe = source.with_suffix(".exe")
-    compiler = os.environ.get("CP_GPP") or "g++"
-    compile_cmd = [
-        compiler,
-        "-std=c++20",
-        "-O2",
-        f"-I{root / 'libraries' / 'cpp'}",
-        f"-I{root / 'libraries' / 'ac-library'}",
-        str(source),
-        "-o",
-        str(exe),
-    ]
-    if subprocess.run(compile_cmd, cwd=source.parent).returncode != 0:
-        failed("COMPILE FAILED")
-        return 1
-
-    if expected_path is not None:
-        result = capture_command([str(exe)], source.parent, input_path)
-        return verify_result(result, expected_path) if result is not None else 1
-
-    return finish_run(run_command([str(exe)], source.parent, input_path))
-
-
-def run_java(
-    source: Path, root: Path, input_path: Path | None, expected_path: Path | None = None
-) -> int:
-    build_dir = (
-        Path(tempfile.gettempdir())
-        / f"cp_java_{os.getpid()}_{random.randint(1000, 9999)}"
-    )
-    build_dir.mkdir(parents=True, exist_ok=True)
-    try:
+    with tempfile.TemporaryDirectory(prefix="cp_cpp_") as build_dir:
+        exe = Path(build_dir) / "solve.exe"
+        compiler = os.environ.get("CP_GPP") or "g++"
         compile_cmd = [
-            "javac",
-            "-encoding",
-            "UTF-8",
-            "-cp",
-            f"{root / 'libraries' / 'java'};{source.parent}",
-            "-sourcepath",
-            f"{root / 'libraries' / 'java'};{source.parent}",
-            "-d",
-            str(build_dir),
+            compiler,
+            "-std=c++20",
+            "-O2",
+            f"-I{root / 'libraries' / 'cpp'}",
+            f"-I{root / 'libraries' / 'ac-library'}",
             str(source),
+            "-o",
+            str(exe),
         ]
         if subprocess.run(compile_cmd, cwd=source.parent).returncode != 0:
             failed("COMPILE FAILED")
             return 1
 
+        if expected_path is not None:
+            result = capture_command([str(exe)], source.parent, input_path)
+            return verify_result(result, expected_path) if result is not None else 1
+
+        return finish_run(run_command([str(exe)], source.parent, input_path))
+
+
+def run_java(
+    source: Path, root: Path, input_path: Path | None, expected_path: Path | None = None
+) -> int:
+    with tempfile.TemporaryDirectory(prefix="cp_java_") as build_dir_name:
+        build_dir = Path(build_dir_name)
+        compiler = os.environ.get("CP_JAVAC") or "javac"
+        runtime = os.environ.get("CP_JAVA") or "java"
+        classpath = f"{root / 'libraries' / 'java'};{source.parent}"
+
+        def quoted_path(value: str | Path) -> str:
+            return f'"{str(value).replace(chr(92), "/")}"'
+
+        javac_args = [
+            "-encoding",
+            "UTF-8",
+            "-cp",
+            quoted_path(classpath),
+            "-sourcepath",
+            quoted_path(classpath),
+            "-d",
+            quoted_path(build_dir),
+            quoted_path(source),
+        ]
+        argfile = build_dir / "javac.args"
+        argfile.write_text("\n".join(javac_args) + "\n", encoding="utf-8", newline="\n")
+        compile_cmd = [compiler, "@" + str(argfile).replace("\\", "/")]
+        if subprocess.run(compile_cmd, cwd=source.parent).returncode != 0:
+            failed("COMPILE FAILED")
+            return 1
+
         command = [
-            "java",
+            runtime,
+            "-Dstdout.encoding=UTF-8",
+            "-Dstderr.encoding=UTF-8",
             "-cp",
             f"{build_dir};{root / 'libraries' / 'java'}",
             source.stem,
@@ -281,14 +300,14 @@ def run_java(
             return verify_result(result, expected_path) if result is not None else 1
 
         return finish_run(run_command(command, source.parent, input_path))
-    finally:
-        shutil.rmtree(build_dir, ignore_errors=True)
 
 
 def run_python(
     source: Path, root: Path, input_path: Path | None, expected_path: Path | None = None
 ) -> int:
     env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
     python_path = str(root / "libraries" / "python")
     env["PYTHONPATH"] = python_path + (
         os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
@@ -320,26 +339,31 @@ def main() -> int:
     source = Path(args.source).resolve()
     root = Path(__file__).resolve().parents[1]
 
-    if not source.exists():
-        print(f"File not found: {source}", file=sys.stderr)
+    if not source.is_file():
+        print(f"Source is not a file: {source}", file=sys.stderr)
         return 1
 
     if args.new_cmd:
         return open_new_cmd(source, args.verify)
 
-    input_path = selected_input(source)
-    expected_path = source.parent / "expected.txt" if args.verify else None
-    if expected_path is not None and not expected_path.exists():
-        failed(f"MISSING EXPECTED: {expected_path}")
-        return 1
-    suffix = source.suffix.lower()
+    try:
+        input_path = selected_input(source)
+        expected_path = source.parent / "expected.txt" if args.verify else None
+        if expected_path is not None and not expected_path.is_file():
+            label = "INVALID EXPECTED" if expected_path.exists() else "MISSING EXPECTED"
+            failed(f"{label}: {expected_path}")
+            return 1
+        suffix = source.suffix.lower()
 
-    if suffix == ".cpp":
-        return run_cpp(source, root, input_path, expected_path)
-    if suffix == ".java":
-        return run_java(source, root, input_path, expected_path)
-    if suffix == ".py":
-        return run_python(source, root, input_path, expected_path)
+        if suffix == ".cpp":
+            return run_cpp(source, root, input_path, expected_path)
+        if suffix == ".java":
+            return run_java(source, root, input_path, expected_path)
+        if suffix == ".py":
+            return run_python(source, root, input_path, expected_path)
+    except OSError as exc:
+        failed(f"EXECUTION ERROR: {exc}")
+        return 1
 
     print(f"Unsupported file type: {source.suffix}", file=sys.stderr)
     print("Supported: .cpp, .java, .py", file=sys.stderr)

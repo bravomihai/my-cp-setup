@@ -71,12 +71,12 @@ def flush():
 
 
 def eprint(*values, sep=" ", end="\n"):
-    print(*values, sep=sep, end=end, file=sys.stderr)
+    if DEBUG:
+        print(*values, sep=sep, end=end, file=sys.stderr)
 
 
 def out(*values, sep=" ", end="\n"):
-    if DEBUG:
-        eprint(*values, sep=sep, end=end)
+    eprint(*values, sep=sep, end=end)
 
 
 def timer_out(seconds):

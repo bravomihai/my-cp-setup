@@ -6,10 +6,12 @@
 *.class
 __pycache__/
 *.pyc
+.ruff_cache/
 
 # temporary files
 *.log
 *.tmp
+.cp_expand_*.cpp
 
 # generated submission files
 submit.cpp
@@ -31,6 +33,7 @@ solve_expand.cpp
 
 # local root workspace files
 /input.txt
+/expected.txt
 /solve.cpp
 /other.cpp
 /debug.cpp
