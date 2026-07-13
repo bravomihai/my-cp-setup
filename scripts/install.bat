@@ -147,7 +147,12 @@ if "%CHECK_ONLY%"=="1" (
 if errorlevel 1 goto failed
 echo.
 
-if "%CHECK_ONLY%"=="1" call :check_mason_tools
+if "%CHECK_ONLY%"=="1" (
+    echo Checking Neovim...
+    call :check_mason_tools
+) else (
+    echo Configuring Neovim...
+)
 
 if "%CHECK_ONLY%"=="1" if not "%MISSING_COUNT%"=="0" goto check_missing
 
@@ -177,6 +182,7 @@ if "%CHECK_ONLY%"=="0" (
     if errorlevel 1 goto failed
 )
 
+echo.
 echo Verifying setup...
 call :verify
 if errorlevel 1 goto failed

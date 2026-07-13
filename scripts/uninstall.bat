@@ -524,6 +524,7 @@ if not errorlevel 1 (
         if errorlevel 1 exit /b 1
         call :clear_state "Winget.MSYS2"
         call :clear_pacman_state
+        echo.
         exit /b 0
     )
 )
