@@ -5,6 +5,7 @@
 - This is a Windows 11 competitive-programming setup for C++, Java, and Python.
 - Keep `scripts/install.bat` and `scripts/uninstall.bat` as the only tracked install/uninstall scripts. Do not add installer helpers or alternate entry points.
 - Preserve the installer/uninstaller prompts, options, status labels, and spinner flow unless the user approves a UX change. External package operations must remain silent and non-interactive.
+- Initial component detection may report `SEARCHING` followed by `FOUND`; post-install verification must stay silent and report one `INSTALLED` only after package, executable, and integrity checks succeed.
 - Keep the tracked templates in `template/`. Under `workspace/`, track only the three language directories through their `.gitkeep` files; never add local solutions or test data to Git.
 - Do not modify the vendored AtCoder Library in `libraries/ac-library`.
 - Keep `my_libraries` focused on lightweight contest conveniences and align equivalent debug/timer behavior across the three languages where practical.

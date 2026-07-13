@@ -18,6 +18,9 @@ set "PACMAN_PACKAGES_ALLOWED=mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64
 set "WINGET_ARGS=--exact --source winget --accept-package-agreements --accept-source-agreements --disable-interactivity"
 set "WINGET_QUIET_ARGS=%WINGET_ARGS% --silent"
 set "CP_MASON_BOOTSTRAP="
+set "PACMAN_DEFER_SUCCESS="
+set "PACMAN_LABEL="
+set "SPIN_DEFER_SUCCESS="
 set "SPIN_PROGRESS_FILE="
 set "SPIN_TIMEOUT_SECONDS="
 
@@ -382,24 +385,23 @@ call :winget_has_package "Git.Git"
 if errorlevel 2 exit /b 1
 if not errorlevel 1 set "PACKAGE_PREEXISTED=1"
 set "INSTALL_CMD=!WINGET! install --id Git.Git %WINGET_QUIET_ARGS%"
-call :run_install_spinner "Git via winget: Git.Git" "" "%TEMP%\cp_setup_winget.log"
+call :run_install_spinner "Git via winget: Git.Git" "" "%TEMP%\cp_setup_winget.log" "INSTALLING" "INSTALLED" "1"
 set "INSTALL_EXIT=%ERRORLEVEL%"
+if not "%INSTALL_EXIT%"=="0" (
+    echo Log: %TEMP%\cp_setup_winget.log
+    exit /b 1
+)
 call :capture_winget_install_result "Git.Git" "Winget.Git"
 if errorlevel 1 exit /b 1
 call :refresh_path
-call :find_git
+call :find_git quiet
 if not errorlevel 1 (
     if "!PACKAGE_PREEXISTED!"=="0" (
         call :record_component_path "Winget.Git" "!FOUND_GIT_PATH!"
         if errorlevel 1 exit /b 1
     )
-    if "%VERBOSE%"=="1" echo   %FOUND_GIT_PATH%
+    call :print_installed "Git via winget: Git.Git" "!FOUND_GIT_PATH!"
     goto git_ready
-)
-if not "%INSTALL_EXIT%"=="0" (
-    echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for Git.
-    echo Log: %TEMP%\cp_setup_winget.log
-    exit /b 1
 )
 echo [%ESC%[31mFAILED%ESC%[0m] Git was not found after winget install.
 echo Log: %TEMP%\cp_setup_winget.log
@@ -415,7 +417,7 @@ set "GIT_FINDER=%TEMP%\cp_setup_find_git_%RANDOM%_%RANDOM%.cmd"
 >> "%GIT_FINDER%" echo powershell -NoProfile -ExecutionPolicy Bypass -Command "$key='HKCU:\Software\my-cp-setup'; $c=@((Get-ItemProperty -Path $key -Name 'Winget.Git.Path' -ErrorAction SilentlyContinue).'Winget.Git.Path','C:\Program Files\Git\cmd\git.exe'); $w=where.exe git 2>$null; if ($LASTEXITCODE -eq 0) { $c += $w }; foreach ($p in $c) { if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) { & $p --version > $null 2>&1; if ($LASTEXITCODE -eq 0) { Write-Output ([IO.Path]::GetFullPath($p)); exit 0 } } }; exit 1"
 >> "%GIT_FINDER%" echo exit /b %%ERRORLEVEL%%
 set "SEARCH_COMMAND_INPUT=call ""%GIT_FINDER%"""
-call :search_command "Git" "@env" "FOUND_GIT_PATH"
+call :search_command "Git" "@env" "FOUND_GIT_PATH" "%~1"
 set "GIT_FIND_EXIT=!ERRORLEVEL!"
 del "%GIT_FINDER%" >nul 2>nul
 exit /b !GIT_FIND_EXIT!
@@ -434,14 +436,24 @@ call :winget_has_package "OpenJS.NodeJS.LTS"
 if errorlevel 2 exit /b 1
 if not errorlevel 1 set "PACKAGE_PREEXISTED=1"
 set "INSTALL_CMD=!WINGET! install --id OpenJS.NodeJS.LTS %WINGET_QUIET_ARGS%"
-call :run_install_spinner "Node.js LTS via winget: OpenJS.NodeJS.LTS" "" "%TEMP%\cp_setup_winget.log"
+call :run_install_spinner "Node.js LTS and npm via winget: OpenJS.NodeJS.LTS" "" "%TEMP%\cp_setup_winget.log" "INSTALLING" "INSTALLED" "1"
 set "INSTALL_EXIT=%ERRORLEVEL%"
+if not "%INSTALL_EXIT%"=="0" (
+    echo Log: %TEMP%\cp_setup_winget.log
+    exit /b 1
+)
 call :capture_winget_install_result "OpenJS.NodeJS.LTS" "Winget.Node"
 if errorlevel 1 exit /b 1
 call :refresh_path
-call :find_node
+call :find_node quiet
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] Node.js LTS was not found after winget install.
+    echo Log: %TEMP%\cp_setup_winget.log
+    exit /b 1
+)
+call :find_npm quiet
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] npm was not found after installing Node.js LTS.
     echo Log: %TEMP%\cp_setup_winget.log
     exit /b 1
 )
@@ -449,6 +461,8 @@ if "!PACKAGE_PREEXISTED!"=="0" (
     call :record_component_path "Winget.Node" "!FOUND_NODE_PATH!"
     if errorlevel 1 exit /b 1
 )
+call :print_installed "Node.js LTS and npm via winget: OpenJS.NodeJS.LTS" "!FOUND_NODE_PATH!"
+goto node_and_npm_ready
 
 :node_ready
 call :find_npm
@@ -464,17 +478,21 @@ call :winget_has_package "OpenJS.NodeJS.LTS"
 if errorlevel 2 exit /b 1
 if not errorlevel 1 set "PACKAGE_PREEXISTED=1"
 set "INSTALL_CMD=!WINGET! install --id OpenJS.NodeJS.LTS %WINGET_QUIET_ARGS% --force"
-call :run_install_spinner "npm via winget: OpenJS.NodeJS.LTS" "" "%TEMP%\cp_setup_winget.log"
+call :run_install_spinner "npm via winget: OpenJS.NodeJS.LTS" "" "%TEMP%\cp_setup_winget.log" "INSTALLING" "INSTALLED" "1"
 set "INSTALL_EXIT=%ERRORLEVEL%"
+if not "%INSTALL_EXIT%"=="0" (
+    echo Log: %TEMP%\cp_setup_winget.log
+    exit /b 1
+)
 call :capture_winget_install_result "OpenJS.NodeJS.LTS" "Winget.Node"
 if errorlevel 1 exit /b 1
 call :refresh_path
-call :find_node
+call :find_node quiet
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] Node.js LTS was not found after reinstalling its winget package.
     exit /b 1
 )
-call :find_npm
+call :find_npm quiet
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] npm was not found after installing Node.js LTS.
     exit /b 1
@@ -483,6 +501,8 @@ if "!PACKAGE_PREEXISTED!"=="0" (
     call :record_component_path "Winget.Node" "!FOUND_NODE_PATH!"
     if errorlevel 1 exit /b 1
 )
+call :print_installed "npm via winget: OpenJS.NodeJS.LTS" "!FOUND_NPM_PATH!"
+:node_and_npm_ready
 exit /b 0
 
 :find_node
@@ -491,7 +511,7 @@ set "NODE_FINDER=%TEMP%\cp_setup_find_node_%RANDOM%_%RANDOM%.cmd"
 >> "%NODE_FINDER%" echo powershell -NoProfile -ExecutionPolicy Bypass -Command "$key='HKCU:\Software\my-cp-setup'; $c=@((Get-ItemProperty -Path $key -Name 'Winget.Node.Path' -ErrorAction SilentlyContinue).'Winget.Node.Path','C:\Program Files\nodejs\node.exe'); $w=where.exe node 2>$null; if ($LASTEXITCODE -eq 0) { $c += $w }; foreach ($p in $c) { if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) { & $p --version > $null 2>&1; if ($LASTEXITCODE -eq 0) { Write-Output ([IO.Path]::GetFullPath($p)); exit 0 } } }; exit 1"
 >> "%NODE_FINDER%" echo exit /b %%ERRORLEVEL%%
 set "SEARCH_COMMAND_INPUT=call ""%NODE_FINDER%"""
-call :search_command "Node.js LTS" "@env" "FOUND_NODE_PATH"
+call :search_command "Node.js LTS" "@env" "FOUND_NODE_PATH" "%~1"
 set "NODE_FIND_EXIT=!ERRORLEVEL!"
 del "%NODE_FINDER%" >nul 2>nul
 exit /b !NODE_FIND_EXIT!
@@ -502,7 +522,7 @@ set "NPM_FINDER=%TEMP%\cp_setup_find_npm_%RANDOM%_%RANDOM%.cmd"
 >> "%NPM_FINDER%" echo powershell -NoProfile -ExecutionPolicy Bypass -Command "$key='HKCU:\Software\my-cp-setup'; $saved=(Get-ItemProperty -Path $key -Name 'Winget.Node.Path' -ErrorAction SilentlyContinue).'Winget.Node.Path'; $c=@('C:\Program Files\nodejs\npm.cmd'); foreach ($node in @($env:FOUND_NODE_PATH,$saved)) { if ($node) { $c += Join-Path (Split-Path -Parent $node) 'npm.cmd' } }; $w=where.exe npm.cmd 2>$null; if ($LASTEXITCODE -eq 0) { $c += $w }; foreach ($p in $c) { if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) { & $p --version > $null 2>&1; if ($LASTEXITCODE -eq 0) { Write-Output ([IO.Path]::GetFullPath($p)); exit 0 } } }; exit 1"
 >> "%NPM_FINDER%" echo exit /b %%ERRORLEVEL%%
 set "SEARCH_COMMAND_INPUT=call ""%NPM_FINDER%"""
-call :search_command "npm" "@env" "FOUND_NPM_PATH"
+call :search_command "npm" "@env" "FOUND_NPM_PATH" "%~1"
 set "NPM_FIND_EXIT=!ERRORLEVEL!"
 del "%NPM_FINDER%" >nul 2>nul
 exit /b !NPM_FIND_EXIT!
@@ -516,7 +536,7 @@ if "%CHECK_ONLY%"=="1" (
 )
 call :install_or_upgrade_winget "Neovim.Neovim" "Neovim" "Winget.Neovim"
 if errorlevel 1 exit /b 1
-call :find_nvim_011
+call :find_nvim_011 quiet
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] Neovim 0.11 or newer was not found after winget install.
     exit /b 1
@@ -525,6 +545,7 @@ if "%PACKAGE_PREEXISTED%"=="0" (
     call :record_component_path "Winget.Neovim" "%FOUND_NVIM_PATH%"
     if errorlevel 1 exit /b 1
 )
+call :print_installed "Neovim via winget: Neovim.Neovim" "%FOUND_NVIM_PATH%"
 exit /b 0
 
 :find_nvim_011
@@ -533,12 +554,13 @@ set "NVIM_FINDER=%TEMP%\cp_setup_find_nvim_%RANDOM%_%RANDOM%.cmd"
 >> "%NVIM_FINDER%" echo powershell -NoProfile -ExecutionPolicy Bypass -Command "$key='HKCU:\Software\my-cp-setup'; $c=@((Get-ItemProperty -Path $key -Name 'Winget.Neovim.Path' -ErrorAction SilentlyContinue).'Winget.Neovim.Path','C:\Program Files\Neovim\bin\nvim.exe'); $w=where.exe nvim 2>$null; if ($LASTEXITCODE -eq 0) { $c += $w }; foreach ($p in $c) { if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) { $line=(& $p --version 2>&1 | Select-Object -First 1); if ($line -match 'v?(\d+)\.(\d+)' -and ([int]$Matches[1] -gt 0 -or [int]$Matches[2] -ge 11)) { Write-Output ([IO.Path]::GetFullPath($p)); exit 0 } } }; exit 1"
 >> "%NVIM_FINDER%" echo exit /b %%ERRORLEVEL%%
 set "SEARCH_COMMAND_INPUT=call ""%NVIM_FINDER%"""
-call :search_command "Neovim 0.11 or newer" "@env" "FOUND_NVIM_PATH"
+call :search_command "Neovim 0.11 or newer" "@env" "FOUND_NVIM_PATH" "%~1"
 set "NVIM_FIND_EXIT=!ERRORLEVEL!"
 del "%NVIM_FINDER%" >nul 2>nul
 exit /b !NVIM_FIND_EXIT!
 
 :need_jdk
+set "JDK_JUST_INSTALLED=0"
 call :find_javac_21
 if not errorlevel 1 goto jdk_ready
 if "%CHECK_ONLY%"=="1" (
@@ -547,7 +569,7 @@ if "%CHECK_ONLY%"=="1" (
 )
 call :install_or_upgrade_winget "EclipseAdoptium.Temurin.21.JDK" "JDK" "Winget.JDK"
 if errorlevel 1 exit /b 1
-call :find_javac_21
+call :find_javac_21 quiet
 if errorlevel 1 (
     echo [%ESC%[31mFAILED%ESC%[0m] JDK 21 or newer was not found after winget install.
     exit /b 1
@@ -556,6 +578,7 @@ if "%PACKAGE_PREEXISTED%"=="0" (
     call :record_component_path "Winget.JDK" "%FOUND_JAVAC_PATH%"
     if errorlevel 1 exit /b 1
 )
+set "JDK_JUST_INSTALLED=1"
 :jdk_ready
 for %%I in ("%FOUND_JAVAC_PATH%") do (
     set "FOUND_JAVA_PATH=%%~dpIjava.exe"
@@ -567,6 +590,7 @@ if not exist "%FOUND_JAVA_PATH%" (
 )
 set "CP_JAVAC=%FOUND_JAVAC_PATH%"
 set "CP_JAVA=%FOUND_JAVA_PATH%"
+if "%JDK_JUST_INSTALLED%"=="1" call :print_installed "JDK via winget: EclipseAdoptium.Temurin.21.JDK" "%FOUND_JAVAC_PATH%"
 exit /b 0
 
 :find_javac_21
@@ -575,7 +599,7 @@ set "JAVAC_FINDER=%TEMP%\cp_setup_find_javac_%RANDOM%_%RANDOM%.cmd"
 >> "%JAVAC_FINDER%" echo powershell -NoProfile -ExecutionPolicy Bypass -Command "$key='HKCU:\Software\my-cp-setup'; $c=@((Get-ItemProperty -Path $key -Name 'Winget.JDK.Path' -ErrorAction SilentlyContinue).'Winget.JDK.Path'); if (Test-Path -LiteralPath 'C:\Program Files\Eclipse Adoptium') { $c += Get-ChildItem -LiteralPath 'C:\Program Files\Eclipse Adoptium' -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'bin\javac.exe' } }; $w=where.exe javac 2>$null; if ($LASTEXITCODE -eq 0) { $c += $w }; foreach ($p in $c) { if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) { $java=Join-Path (Split-Path -Parent $p) 'java.exe'; if (Test-Path -LiteralPath $java -PathType Leaf) { $javacLine=(& $p -version 2>&1 | Select-Object -First 1); $javaLine=(& $java -version 2>&1 | Select-Object -First 1); if ($javacLine -match 'javac\s+(\d+)') { $javacMajor=[int]$Matches[1]; if ($javaLine -match 'version\s+[^0-9]*(\d+)') { $javaMajor=[int]$Matches[1]; if ($javacMajor -ge 21 -and $javaMajor -ge 21) { Write-Output ([IO.Path]::GetFullPath($p)); exit 0 } } } } } }; exit 1"
 >> "%JAVAC_FINDER%" echo exit /b %%ERRORLEVEL%%
 set "SEARCH_COMMAND_INPUT=call ""%JAVAC_FINDER%"""
-call :search_command "JDK 21 or newer" "@env" "FOUND_JAVAC_PATH"
+call :search_command "JDK 21 or newer" "@env" "FOUND_JAVAC_PATH" "%~1"
 set "JAVAC_FIND_EXIT=!ERRORLEVEL!"
 del "%JAVAC_FINDER%" >nul 2>nul
 exit /b !JAVAC_FIND_EXIT!
@@ -592,8 +616,12 @@ if "%PACKAGE_PREEXISTED%"=="1" (
 ) else (
     set "INSTALL_CMD=!WINGET! install --id %~1 %WINGET_QUIET_ARGS%"
 )
-call :run_install_spinner "%~2 via winget: %~1" "" "%TEMP%\cp_setup_winget.log"
+call :run_install_spinner "%~2 via winget: %~1" "" "%TEMP%\cp_setup_winget.log" "INSTALLING" "INSTALLED" "1"
 set "INSTALL_EXIT=%ERRORLEVEL%"
+if not "%INSTALL_EXIT%"=="0" (
+    echo Log: %TEMP%\cp_setup_winget.log
+    exit /b 1
+)
 call :capture_winget_install_result "%~1" "%~3"
 if errorlevel 1 exit /b 1
 call :refresh_path
@@ -601,6 +629,14 @@ exit /b 0
 
 :print_found
 echo [%ESC%[38;5;114mFOUND%ESC%[0m] %~1
+exit /b 0
+
+:print_installed
+if "%VERBOSE%"=="1" if not "%~2"=="" (
+    echo [%ESC%[38;5;114mINSTALLED%ESC%[0m] %~1: %~2
+    exit /b 0
+)
+echo [%ESC%[38;5;114mINSTALLED%ESC%[0m] %~1
 exit /b 0
 
 :print_found_path
@@ -644,6 +680,7 @@ exit /b 0
 :search_command
 setlocal EnableExtensions EnableDelayedExpansion
 set "SEARCH_LABEL=%~1"
+set "SEARCH_QUIET=%~4"
 if /i "%~2"=="@env" (
     set "SEARCH_COMMAND=!SEARCH_COMMAND_INPUT!"
 ) else (
@@ -654,21 +691,24 @@ set "SEARCH_PS=%TEMP%\cp_setup_search_%RANDOM%_%RANDOM%.ps1"
 > "%SEARCH_PS%" echo $label = $env:SEARCH_LABEL
 >> "%SEARCH_PS%" echo $command = $env:SEARCH_COMMAND
 >> "%SEARCH_PS%" echo $output = $env:SEARCH_RESULT_FILE
+>> "%SEARCH_PS%" echo $quiet = $env:SEARCH_QUIET -ieq 'quiet'
 >> "%SEARCH_PS%" echo $esc = [char]27
 >> "%SEARCH_PS%" echo $cr = [char]13
 >> "%SEARCH_PS%" echo $clear = $esc + '[2K'
 >> "%SEARCH_PS%" echo $searching = '[' + $esc + '[38;5;183mSEARCHING' + $esc + '[0m]'
 >> "%SEARCH_PS%" echo $found = '[' + $esc + '[38;5;114mFOUND' + $esc + '[0m]'
 >> "%SEARCH_PS%" echo $frames = @([char]92,'-','/','^|')
->> "%SEARCH_PS%" echo $job = Start-Job -ScriptBlock { param($command) $items = @(^& $env:ComSpec /d /c $command 2^>$null); [pscustomobject]@{ ExitCode = $LASTEXITCODE; Items = $items } } -ArgumentList $command
->> "%SEARCH_PS%" echo $i = 0
->> "%SEARCH_PS%" echo do { Write-Host -NoNewline ($cr + $clear + $searching + ' ' + $frames[$i %% $frames.Count] + ' ' + $label); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ } while ($job.State -eq 'Running')
->> "%SEARCH_PS%" echo $result = Receive-Job -Wait $job
->> "%SEARCH_PS%" echo Remove-Job $job -Force
->> "%SEARCH_PS%" echo $items = @($result.Items)
+>> "%SEARCH_PS%" echo if ($quiet) { $items = @(^& $env:ComSpec /d /c $command 2^>$null); $exitCode = $LASTEXITCODE } else {
+>> "%SEARCH_PS%" echo     $job = Start-Job -ScriptBlock { param($command) $items = @(^& $env:ComSpec /d /c $command 2^>$null); [pscustomobject]@{ ExitCode = $LASTEXITCODE; Items = $items } } -ArgumentList $command
+>> "%SEARCH_PS%" echo     $i = 0
+>> "%SEARCH_PS%" echo     do { Write-Host -NoNewline ($cr + $clear + $searching + ' ' + $frames[$i %% $frames.Count] + ' ' + $label); [Console]::Out.Flush(); Start-Sleep -Milliseconds 100; $i++ } while ($job.State -eq 'Running')
+>> "%SEARCH_PS%" echo     $result = Receive-Job -Wait $job
+>> "%SEARCH_PS%" echo     Remove-Job $job -Force
+>> "%SEARCH_PS%" echo     $items = @($result.Items)
+>> "%SEARCH_PS%" echo     $exitCode = [int]$result.ExitCode
+>> "%SEARCH_PS%" echo }
 >> "%SEARCH_PS%" echo if ($items.Count) { [IO.File]::WriteAllLines($output,[string[]]$items) } else { [IO.File]::WriteAllText($output,'') }
->> "%SEARCH_PS%" echo $exitCode = [int]$result.ExitCode
->> "%SEARCH_PS%" echo if ($exitCode -eq 0) { $suffix = ''; if ($env:VERBOSE -eq '1' -and $items.Count) { $suffix = ': ' + $items[0] }; Write-Host ($cr + $clear + $found + ' ' + $label + $suffix) } else { Write-Host -NoNewline ($cr + $clear) }
+>> "%SEARCH_PS%" echo if (-not $quiet) { if ($exitCode -eq 0) { $suffix = ''; if ($env:VERBOSE -eq '1' -and $items.Count) { $suffix = ': ' + $items[0] }; Write-Host ($cr + $clear + $found + ' ' + $label + $suffix) } else { Write-Host -NoNewline ($cr + $clear) } }
 >> "%SEARCH_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SEARCH_PS%"
 set "SEARCH_EXIT=%ERRORLEVEL%"
@@ -738,7 +778,7 @@ exit /b 0
 if not defined FOUND_GIT_PATH exit /b 1
 if not exist "%ROOT%\.gitmodules" exit /b 1
 set "INSTALL_CMD=git -C "%ROOT%" submodule update --init --checkout libraries/ac-library"
-call :run_install_spinner "ac-library submodule" "" "%TEMP%\cp_setup_git.log"
+call :run_install_spinner "ac-library submodule" "" "%TEMP%\cp_setup_git.log" "INSTALLING" "INSTALLED" "1"
 set "AC_LIBRARY_EXIT=!ERRORLEVEL!"
 if not "!AC_LIBRARY_EXIT!"=="0" (
     echo [%ESC%[31mFAILED%ESC%[0m] ac-library submodule update failed.
@@ -746,11 +786,16 @@ if not "!AC_LIBRARY_EXIT!"=="0" (
     exit /b 1
 )
 call :ac_library_needs_update
-if errorlevel 1 exit /b 1
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] Could not verify the ac-library submodule after checkout.
+    echo Log: %TEMP%\cp_setup_git.log
+    exit /b 1
+)
 if "%AC_LIBRARY_NEEDS_UPDATE%"=="1" (
     echo [%ESC%[31mFAILED%ESC%[0m] ac-library did not reach the pinned commit after checkout.
     exit /b 1
 )
+call :print_installed "ac-library submodule"
 exit /b 0
 
 :check_env_paths
@@ -840,16 +885,40 @@ if errorlevel 1 exit /b 1
 set "PACMAN_REQUESTED=mingw-w64-x86_64-gcc mingw-w64-x86_64-gdb mingw-w64-x86_64-clang-tools-extra mingw-w64-x86_64-python"
 call :capture_missing_pacman_packages "%PACMAN_REQUESTED%"
 if errorlevel 1 exit /b 1
+set "PACMAN_MISSING_BEFORE=%PACMAN_MISSING%"
 set "PACMAN_COMMAND=pacman -S --needed --noconfirm %PACMAN_REQUESTED%"
-call :run_pacman_spinner "INSTALLING" "INSTALLED"
+call :run_pacman_spinner "INSTALLING" "INSTALLED" "MSYS2 toolchain via pacman" "1"
 if errorlevel 1 (
+    set "PACMAN_MISSING=!PACMAN_MISSING_BEFORE!"
     call :record_partial_pacman_packages
     echo [%ESC%[31mFAILED%ESC%[0m] pacman toolchain install failed.
     echo Log: %TEMP%\cp_setup_pacman.log
     exit /b 1
 )
+call :capture_missing_pacman_packages "%PACMAN_REQUESTED%"
+if errorlevel 1 exit /b 1
+set "PACMAN_VERIFY_MISSING=!PACMAN_MISSING!"
+set "PACMAN_MISSING=!PACMAN_MISSING_BEFORE!"
+if defined PACMAN_VERIFY_MISSING (
+    call :record_partial_pacman_packages
+    echo [%ESC%[31mFAILED%ESC%[0m] pacman did not install every required toolchain package: !PACMAN_VERIFY_MISSING!
+    echo Log: %TEMP%\cp_setup_pacman.log
+    exit /b 1
+)
 call :record_pacman_packages
-exit /b %ERRORLEVEL%
+if errorlevel 1 exit /b 1
+call :find_gpp quiet
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] g++ was not usable after the pacman toolchain install.
+    exit /b 1
+)
+call :find_python quiet
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] Python was not usable after the pacman toolchain install.
+    exit /b 1
+)
+call :print_installed "MSYS2 toolchain via pacman"
+exit /b 0
 
 :ensure_msys2
 call :find_msys2_shell
@@ -861,13 +930,17 @@ if errorlevel 1 (
     if errorlevel 2 exit /b 1
     if not errorlevel 1 set "PACKAGE_PREEXISTED=1"
     set "INSTALL_CMD=!WINGET! install --id MSYS2.MSYS2 %WINGET_QUIET_ARGS% --override "install --confirm-command --accept-messages --root C:\msys64""
-    call :run_install_spinner "MSYS2 via winget: MSYS2.MSYS2" "" "%TEMP%\cp_setup_winget.log"
-    set "INSTALL_EXIT=%ERRORLEVEL%"
+    call :run_install_spinner "MSYS2 via winget: MSYS2.MSYS2" "" "%TEMP%\cp_setup_winget.log" "INSTALLING" "INSTALLED" "1"
+    set "INSTALL_EXIT=!ERRORLEVEL!"
+    if not "!INSTALL_EXIT!"=="0" (
+        echo Log: %TEMP%\cp_setup_winget.log
+        exit /b 1
+    )
     call :capture_winget_install_result "MSYS2.MSYS2" "Winget.MSYS2"
     if errorlevel 1 exit /b 1
     call :find_msys2_shell quiet
     if errorlevel 1 (
-        echo [%ESC%[31mFAILED%ESC%[0m] winget install failed for MSYS2.
+        echo [%ESC%[31mFAILED%ESC%[0m] MSYS2 was installed, but its shell was not found.
         echo Log: %TEMP%\cp_setup_winget.log
         exit /b 1
     )
@@ -875,7 +948,7 @@ if errorlevel 1 (
         call :record_component_path "Winget.MSYS2" "!MSYS2_SHELL!"
         if errorlevel 1 exit /b 1
     )
-    if "%VERBOSE%"=="1" echo   %MSYS2_SHELL%
+    call :print_installed "MSYS2 via winget: MSYS2.MSYS2" "!MSYS2_SHELL!"
 )
 exit /b 0
 
@@ -934,7 +1007,7 @@ set "ACL_BOOTSTRAP_PS=%TEMP%\cp_setup_acl_%RANDOM%_%RANDOM%.ps1"
 >> "%ACL_BOOTSTRAP_PS%" echo     Get-ChildItem -LiteralPath $source -Force ^| Copy-Item -Destination $target -Recurse -Force
 >> "%ACL_BOOTSTRAP_PS%" echo } catch { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue; throw } finally { Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue }
 set "INSTALL_CMD=powershell -NoProfile -ExecutionPolicy Bypass -File "%ACL_BOOTSTRAP_PS%""
-call :run_install_spinner "ac-library pinned archive" "" "%TEMP%\cp_setup_acl.log"
+call :run_install_spinner "ac-library pinned archive" "" "%TEMP%\cp_setup_acl.log" "INSTALLING" "INSTALLED" "1"
 set "ACL_BOOTSTRAP_EXIT=%ERRORLEVEL%"
 del "%ACL_BOOTSTRAP_PS%" >nul 2>nul
 if not "%ACL_BOOTSTRAP_EXIT%"=="0" (
@@ -942,21 +1015,36 @@ if not "%ACL_BOOTSTRAP_EXIT%"=="0" (
     echo Log: %TEMP%\cp_setup_acl.log
     exit /b 1
 )
-if not exist "%ROOT%\libraries\ac-library\expander.py" exit /b 1
+if not exist "%ROOT%\libraries\ac-library\expander.py" (
+    echo [%ESC%[31mFAILED%ESC%[0m] Downloaded ac-library content is incomplete.
+    echo Log: %TEMP%\cp_setup_acl.log
+    exit /b 1
+)
 call :compute_ac_library_tree_hash "%ROOT%\libraries\ac-library"
-if errorlevel 1 exit /b 1
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] Could not verify the downloaded ac-library integrity hash.
+    echo Log: %TEMP%\cp_setup_acl.log
+    exit /b 1
+)
 if /i not "%AC_LIBRARY_TREE_ACTUAL%"=="%ACL_TREE_HASH%" (
     powershell -NoProfile -ExecutionPolicy Bypass -Command "Remove-Item -LiteralPath (Join-Path $env:ROOT 'libraries\ac-library') -Recurse -Force -ErrorAction SilentlyContinue"
     echo [%ESC%[31mFAILED%ESC%[0m] Downloaded ac-library content does not match the pinned tree hash.
     exit /b 1
 )
+call :print_installed "ac-library pinned archive"
 exit /b 0
 
 :capture_missing_pacman_packages
 call :find_msys2_shell quiet
-if errorlevel 1 exit /b 1
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] MSYS2 was not available while checking pacman packages.
+    exit /b 1
+)
 for %%I in ("%MSYS2_SHELL%") do set "MSYS2_BASH=%%~dpIusr\bin\bash.exe"
-if not exist "%MSYS2_BASH%" exit /b 1
+if not exist "%MSYS2_BASH%" (
+    echo [%ESC%[31mFAILED%ESC%[0m] MSYS2 bash was not available while checking pacman packages.
+    exit /b 1
+)
 set "PACMAN_MISSING="
 for %%P in (%~1) do (
     "%MSYS2_BASH%" -lc "pacman -Qq -- %%P >/dev/null 2>&1"
@@ -967,7 +1055,11 @@ exit /b 0
 
 :record_pacman_packages
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $key='HKCU:\Software\my-cp-setup'; $allowed=@($env:PACMAN_PACKAGES_ALLOWED -split ' ' | Where-Object { $_ }); $new=@($env:PACMAN_MISSING -split ' ' | Where-Object { $_ }); $existing=@((Get-ItemProperty -Path $key -Name 'Pacman.Packages' -ErrorAction SilentlyContinue).'Pacman.Packages' | Where-Object { $_ }); foreach ($name in @($existing+$new)) { if ($allowed -inotcontains $name) { throw ('Unsafe setup-owned pacman package: '+$name) } }; $owned=@($existing+$new | Sort-Object -Unique); if ($owned.Count) { New-ItemProperty -Path $key -Name 'Pacman.Packages' -PropertyType MultiString -Value ([string[]]$owned) -Force | Out-Null; New-ItemProperty -Path $key -Name 'Pacman.Toolchain' -PropertyType DWord -Value 1 -Force | Out-Null; $shell=$env:MSYS2_SHELL; if ($shell -and (Test-Path -LiteralPath $shell)) { New-ItemProperty -Path $key -Name 'Pacman.Shell.Path' -PropertyType String -Value ([IO.Path]::GetFullPath($shell)) -Force | Out-Null } }"
-exit /b %ERRORLEVEL%
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] Could not record setup ownership for pacman packages.
+    exit /b 1
+)
+exit /b 0
 
 :record_partial_pacman_packages
 set "PACMAN_INSTALLED_NEW="
@@ -983,12 +1075,16 @@ exit /b %ERRORLEVEL%
 :run_pacman_spinner
 set "PACMAN_ACTION=%~1"
 set "PACMAN_SUCCESS=%~2"
+set "PACMAN_LABEL=%~3"
+set "PACMAN_DEFER_SUCCESS=%~4"
 if not defined PACMAN_ACTION set "PACMAN_ACTION=INSTALLING"
 if not defined PACMAN_SUCCESS set "PACMAN_SUCCESS=INSTALLED"
+if not defined PACMAN_LABEL set "PACMAN_LABEL=MSYS2 toolchain via pacman"
 set "SPIN_PS=%TEMP%\cp_setup_pacman_spinner_%RANDOM%_%RANDOM%.ps1"
 > "%SPIN_PS%" echo $ErrorActionPreference = 'Stop'
->> "%SPIN_PS%" echo $label = 'MSYS2 toolchain via pacman'
+>> "%SPIN_PS%" echo $label = $env:PACMAN_LABEL
 >> "%SPIN_PS%" echo $hint = 'this may take a while'
+>> "%SPIN_PS%" echo $deferSuccess = $env:PACMAN_DEFER_SUCCESS -eq '1'
 >> "%SPIN_PS%" echo $log = Join-Path $env:TEMP 'cp_setup_pacman.log'
 >> "%SPIN_PS%" echo $wrapper = Join-Path $env:TEMP ('cp_setup_pacman_' + [guid]::NewGuid().ToString('N') + '.cmd')
 >> "%SPIN_PS%" echo $q = [char]34
@@ -997,13 +1093,14 @@ set "SPIN_PS=%TEMP%\cp_setup_pacman_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $clear = $esc + '[2K'
 >> "%SPIN_PS%" echo $action = '[' + $esc + '[38;5;153m' + $env:PACMAN_ACTION + $esc + '[0m]'
 >> "%SPIN_PS%" echo $success = '[' + $esc + '[38;5;114m' + $env:PACMAN_SUCCESS + $esc + '[0m]'
+>> "%SPIN_PS%" echo $failure = '[' + $esc + '[31mFAILED' + $esc + '[0m]'
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $log,$wrapper -ErrorAction SilentlyContinue
 >> "%SPIN_PS%" echo $shell = $null
 >> "%SPIN_PS%" echo foreach ($path in @($env:MSYS2_SHELL,'C:\msys64\msys2_shell.cmd')) { if ($path -and (Split-Path -Leaf $path) -ieq 'msys2_shell.cmd' -and (Test-Path -LiteralPath $path)) { $shell = [IO.Path]::GetFullPath($path); break } }
 >> "%SPIN_PS%" echo if (-not $shell) { $cmd = Get-Command msys2_shell.cmd -ErrorAction SilentlyContinue; if ($cmd) { $shell = $cmd.Source } }
->> "%SPIN_PS%" echo if (-not $shell) { 'Could not find msys2_shell.cmd after installing MSYS2.' ^| Set-Content -LiteralPath $log; Write-Host ($action + ' ' + $label); exit 1 }
+>> "%SPIN_PS%" echo if (-not $shell) { 'Could not find msys2_shell.cmd after installing MSYS2.' ^| Set-Content -LiteralPath $log; Write-Host ($failure + ' ' + $label); exit 1 }
 >> "%SPIN_PS%" echo $bash = Join-Path (Split-Path -Parent $shell) 'usr\bin\bash.exe'
->> "%SPIN_PS%" echo if (-not (Test-Path -LiteralPath $bash)) { 'Could not find MSYS2 bash.exe after installing MSYS2.' ^| Set-Content -LiteralPath $log; Write-Host ($action + ' ' + $label); exit 1 }
+>> "%SPIN_PS%" echo if (-not (Test-Path -LiteralPath $bash)) { 'Could not find MSYS2 bash.exe after installing MSYS2.' ^| Set-Content -LiteralPath $log; Write-Host ($failure + ' ' + $label); exit 1 }
 >> "%SPIN_PS%" echo $pacman = $env:PACMAN_COMMAND
 >> "%SPIN_PS%" echo $runLine = [string]('call ' + $q + $bash + $q + ' -lc ' + $q + $pacman + $q + ' 1^>' + $q + $log + $q + ' 2^>^&1')
 >> "%SPIN_PS%" echo $lines = @('@echo off','set "MSYSTEM=MINGW64"','set "CHERE_INVOKING=enabled_from_arguments"',$runLine,'exit /b %%ERRORLEVEL%%')
@@ -1017,7 +1114,7 @@ set "SPIN_PS=%TEMP%\cp_setup_pacman_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $jobItems = @($jobResult)
 >> "%SPIN_PS%" echo if ($jobItems.Count -eq 0) { $exitCode = 1 } else { $exitCode = [int]$jobItems[-1] }
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue
->> "%SPIN_PS%" echo if ($exitCode -eq 0) { Write-Host ($cr + $clear + $success + ' ' + $label) } else { Write-Host ($cr + $clear + '[' + $esc + '[31mFAILED' + $esc + '[0m] ' + $label) }
+>> "%SPIN_PS%" echo if ($exitCode -eq 0 -and $deferSuccess) { Write-Host -NoNewline ($cr + $clear) } elseif ($exitCode -eq 0) { Write-Host ($cr + $clear + $success + ' ' + $label) } else { Write-Host ($cr + $clear + $failure + ' ' + $label) }
 >> "%SPIN_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SPIN_PS%"
 set "SPIN_EXIT=%ERRORLEVEL%"
@@ -1030,6 +1127,7 @@ set "SPIN_HINT=%~2"
 set "SPIN_LOG=%~3"
 set "SPIN_ACTION=%~4"
 set "SPIN_SUCCESS=%~5"
+set "SPIN_DEFER_SUCCESS=%~6"
 if not defined SPIN_ACTION set "SPIN_ACTION=INSTALLING"
 if not defined SPIN_SUCCESS set "SPIN_SUCCESS=INSTALLED"
 set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
@@ -1038,6 +1136,7 @@ set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo $hint = $env:SPIN_HINT
 >> "%SPIN_PS%" echo $log = $env:SPIN_LOG
 >> "%SPIN_PS%" echo $cmd = [string]$env:INSTALL_CMD
+>> "%SPIN_PS%" echo $deferSuccess = $env:SPIN_DEFER_SUCCESS -eq '1'
 >> "%SPIN_PS%" echo $progressFile = $env:SPIN_PROGRESS_FILE
 >> "%SPIN_PS%" echo [int]$timeoutSeconds = 0
 >> "%SPIN_PS%" echo if (-not [int]::TryParse($env:SPIN_TIMEOUT_SECONDS, [ref]$timeoutSeconds) -or $timeoutSeconds -lt 1) { $timeoutSeconds = 0 }
@@ -1065,7 +1164,7 @@ set "SPIN_PS=%TEMP%\cp_setup_install_spinner_%RANDOM%_%RANDOM%.ps1"
 >> "%SPIN_PS%" echo if ($progressFile -and (Test-Path -LiteralPath $progressFile)) { try { $finalDetail = (Get-Content -LiteralPath $progressFile -First 1 -ErrorAction Stop).Trim() } catch {} }
 >> "%SPIN_PS%" echo Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue
 >> "%SPIN_PS%" echo if ($progressFile) { Remove-Item -LiteralPath $progressFile -ErrorAction SilentlyContinue }
->> "%SPIN_PS%" echo if ($exitCode -eq 0) { $finalText = $success + ' ' + $label } else { $finalText = '[' + $esc + '[31mFAILED' + $esc + '[0m] ' + $label }; if ($finalDetail) { $finalText += ' (' + $finalDetail + ')' }; Write-Host ($cr + $clear + $finalText)
+>> "%SPIN_PS%" echo if ($exitCode -eq 0 -and $deferSuccess) { Write-Host -NoNewline ($cr + $clear) } else { if ($exitCode -eq 0) { $finalText = $success + ' ' + $label } else { $finalText = '[' + $esc + '[31mFAILED' + $esc + '[0m] ' + $label }; if ($finalDetail) { $finalText += ' (' + $finalDetail + ')' }; Write-Host ($cr + $clear + $finalText) }
 >> "%SPIN_PS%" echo exit $exitCode
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SPIN_PS%"
 set "SPIN_EXIT=%ERRORLEVEL%"
@@ -1136,7 +1235,11 @@ exit /b %ERRORLEVEL%
 if "%~1"=="" exit /b 0
 if "%~2"=="" exit /b 0
 reg add "%STATE_KEY%" /v "%~1.Path" /t REG_SZ /d "%~2" /f >nul
-exit /b %ERRORLEVEL%
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] Could not record the resolved path for %~1.
+    exit /b 1
+)
+exit /b 0
 
 :ensure_ruff
 call :find_ruff
@@ -1150,18 +1253,33 @@ if errorlevel 1 exit /b 1
 set "PACMAN_REQUESTED=mingw-w64-x86_64-ruff"
 call :capture_missing_pacman_packages "%PACMAN_REQUESTED%"
 if errorlevel 1 exit /b 1
+set "PACMAN_MISSING_BEFORE=%PACMAN_MISSING%"
 set "PACMAN_COMMAND=pacman -S --needed --noconfirm %PACMAN_REQUESTED%"
-call :run_pacman_spinner "INSTALLING" "INSTALLED"
+call :run_pacman_spinner "INSTALLING" "INSTALLED" "Ruff via pacman" "1"
 if errorlevel 1 (
+    set "PACMAN_MISSING=!PACMAN_MISSING_BEFORE!"
     call :record_partial_pacman_packages
     echo [%ESC%[31mFAILED%ESC%[0m] Ruff install failed.
     echo Log: %TEMP%\cp_setup_pacman.log
     exit /b 1
 )
+call :capture_missing_pacman_packages "%PACMAN_REQUESTED%"
+if errorlevel 1 exit /b 1
+set "PACMAN_VERIFY_MISSING=!PACMAN_MISSING!"
+set "PACMAN_MISSING=!PACMAN_MISSING_BEFORE!"
+if defined PACMAN_VERIFY_MISSING (
+    call :record_partial_pacman_packages
+    echo [%ESC%[31mFAILED%ESC%[0m] pacman did not install Ruff.
+    echo Log: %TEMP%\cp_setup_pacman.log
+    exit /b 1
+)
 call :record_pacman_packages
 if errorlevel 1 exit /b 1
-call :find_ruff
-if not errorlevel 1 exit /b 0
+call :find_ruff quiet
+if not errorlevel 1 (
+    call :print_installed "Ruff via pacman" "!FOUND_RUFF_PATH!"
+    exit /b 0
+)
 echo [%ESC%[31mFAILED%ESC%[0m] Ruff was installed, but ruff.exe was not found.
 exit /b 1
 
@@ -1171,7 +1289,7 @@ set "RUFF_FINDER=%TEMP%\cp_setup_find_ruff_%RANDOM%_%RANDOM%.cmd"
 >> "%RUFF_FINDER%" echo powershell -NoProfile -ExecutionPolicy Bypass -Command "$key='HKCU:\Software\my-cp-setup'; $c=@(); foreach ($exe in @($env:CP_GPP,$env:CP_PYTHON)) { if ($exe) { $c += Join-Path (Split-Path -Parent $exe) 'ruff.exe' } }; $shells=@($env:MSYS2_SHELL); foreach ($name in @('Pacman.Shell.Path','Winget.MSYS2.Path')) { $value=(Get-ItemProperty -Path $key -Name $name -ErrorAction SilentlyContinue).$name; if ($value) { $shells += $value } }; foreach ($shell in $shells) { if ($shell) { $c += Join-Path (Split-Path -Parent $shell) 'mingw64\bin\ruff.exe' } }; $c += @('C:\msys64\mingw64\bin\ruff.exe','C:\msys64\ucrt64\bin\ruff.exe'); $w=where.exe ruff 2>$null; if ($LASTEXITCODE -eq 0) { $c += $w }; foreach ($p in $c) { if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) { & $p --version > $null 2>&1; if ($LASTEXITCODE -eq 0) { Write-Output ([IO.Path]::GetFullPath($p)); exit 0 } } }; exit 1"
 >> "%RUFF_FINDER%" echo exit /b %%ERRORLEVEL%%
 set "SEARCH_COMMAND_INPUT=call ""%RUFF_FINDER%"""
-call :search_command "Ruff" "@env" "FOUND_RUFF_PATH"
+call :search_command "Ruff" "@env" "FOUND_RUFF_PATH" "%~1"
 set "RUFF_FIND_EXIT=!ERRORLEVEL!"
 del "%RUFF_FINDER%" >nul 2>nul
 exit /b !RUFF_FIND_EXIT!
@@ -1271,6 +1389,12 @@ if not "%LAZY_BOOTSTRAP_EXIT%"=="0" (
     echo [%ESC%[31mFAILED%ESC%[0m] LazyVim plugin bootstrap failed.
     echo Log: %TEMP%\cp_setup_nvim.log
     exit /b 1
+)
+call :verify_mason_tools
+if not errorlevel 1 (
+    set "CP_MASON_BOOTSTRAP="
+    call :print_found "Neovim language tools"
+    exit /b 0
 )
 set "MASON_BOOTSTRAP_LUA=%TEMP%\cp_setup_mason_%RANDOM%_%RANDOM%.lua"
 > "%MASON_BOOTSTRAP_LUA%" echo local names = { "pyright", "jdtls", "google-java-format", "clangd" }
@@ -1398,7 +1522,7 @@ set "MASON_BOOTSTRAP_LUA=%TEMP%\cp_setup_mason_%RANDOM%_%RANDOM%.lua"
 set "INSTALL_CMD="%FOUND_NVIM_PATH%" --headless -c "lua dofile([[!MASON_BOOTSTRAP_LUA!]])""
 set "SPIN_PROGRESS_FILE=%TEMP%\cp_setup_mason_progress_%RANDOM%_%RANDOM%.txt"
 set "SPIN_TIMEOUT_SECONDS=330"
-call :run_install_spinner "Neovim language tools" "this may take a while" "%TEMP%\cp_setup_mason.log"
+call :run_install_spinner "Neovim language tools" "this may take a while" "%TEMP%\cp_setup_mason.log" "INSTALLING" "INSTALLED" "1"
 set "MASON_BOOTSTRAP_EXIT=%ERRORLEVEL%"
 set "SPIN_TIMEOUT_SECONDS="
 set "SPIN_PROGRESS_FILE="
@@ -1415,6 +1539,13 @@ if not "%MASON_RECORD_EXIT%"=="0" (
     echo [%ESC%[31mFAILED%ESC%[0m] Could not record setup-owned Mason packages.
     exit /b 1
 )
+call :verify_mason_tools
+if errorlevel 1 (
+    echo [%ESC%[31mFAILED%ESC%[0m] Mason tools were installed, but their executables are not usable.
+    echo Log: %TEMP%\cp_setup_mason.log
+    exit /b 1
+)
+call :print_installed "Neovim language tools"
 exit /b 0
 
 :capture_missing_mason_packages
