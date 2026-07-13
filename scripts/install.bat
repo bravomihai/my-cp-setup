@@ -297,12 +297,6 @@ exit /b 0
 :ensure_admin
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$id=[Security.Principal.WindowsIdentity]::GetCurrent(); $principal=[Security.Principal.WindowsPrincipal]::new($id); if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { exit 0 }; exit 1"
 if not errorlevel 1 exit /b 0
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$id=[Security.Principal.WindowsIdentity]::GetCurrent(); foreach ($group in $id.Groups) { if ($group.Value -eq 'S-1-5-32-544') { exit 0 } }; exit 1"
-if errorlevel 1 (
-    echo [%ESC%[31mFAILED%ESC%[0m] CP setup must be installed from an account in the local Administrators group.
-    echo Sign in with an administrator account and run this installer again.
-    exit /b 1
-)
 
 set "ELEVATE_PS=%TEMP%\cp_setup_elevate_%RANDOM%_%RANDOM%.ps1"
 set "ELEVATE_LOG=%TEMP%\cp_setup_elevate.log"
