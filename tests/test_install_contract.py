@@ -614,6 +614,26 @@ class InstallContractTests(unittest.TestCase):
         )
         self.assertIn("call :run_silent_timeout", ac_check)
 
+    def test_search_results_stay_an_array_when_only_one_path_is_found(self) -> None:
+        search = generated_echo(label("search_command"), "SEARCH_PS")
+        self.assertIn("$items = @(if (Test-Path -LiteralPath $output)", search)
+        self.assertNotIn("$items = if (Test-Path -LiteralPath $output)", search)
+
+    def test_ac_library_gitlink_parser_reads_and_validates_ls_tree_output(
+        self,
+    ) -> None:
+        ac_check = label("ac_library_needs_update")
+        self.assertIn(
+            'for /F "usebackq tokens=1,2,3,*" %%A in ("%AC_GIT_OUTPUT%")',
+            ac_check,
+        )
+        self.assertIn('if not "!AC_LIBRARY_ENTRY_MODE!"=="160000"', ac_check)
+        self.assertIn('if /i not "!AC_LIBRARY_ENTRY_TYPE!"=="commit"', ac_check)
+        self.assertIn(
+            'if /i not "!AC_LIBRARY_ENTRY_PATH!"=="libraries/ac-library"',
+            ac_check,
+        )
+
     def test_all_embedded_powershell_blocks_parse(self) -> None:
         powershell = shutil.which("powershell")
         if not powershell:

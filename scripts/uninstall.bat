@@ -571,7 +571,7 @@ set "CP_SOURCE_TRANSPORT_PATH=%CP_VISIBLE_TEMP%\cp_setup_uninstall_source_%RANDO
 set "CP_ELEVATE_PROTOCOL_FILE=%CP_VISIBLE_TEMP%\cp_setup_uninstall_protocol_%RANDOM%_%RANDOM%.txt"
 del "%CP_ELEVATE_PROTOCOL_FILE%" >nul 2>nul
 setlocal DisableDelayedExpansion
-"%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop';$lines=[IO.File]::ReadAllLines($env:CP_UNINSTALL_SCRIPT);$first=[Array]::IndexOf($lines,'::__CP_UNINSTALL_ELEVATE_BEGIN__');$last=[Array]::IndexOf($lines,'::__CP_UNINSTALL_ELEVATE_END__');if($first-lt 0-or$last-le$first){throw 'Missing uninstall elevation orchestrator.'};$source=for($i=$first+1;$i-lt$last;$i++){if(-not$lines[$i].StartsWith('::',[StringComparison]::Ordinal)){throw 'Malformed uninstall elevation orchestrator.'};$lines[$i].Substring(2)};^&([scriptblock]::Create($source-join[Environment]::NewLine))"
+"%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop';$lines=[IO.File]::ReadAllLines($env:CP_UNINSTALL_SCRIPT);$first=[Array]::IndexOf($lines,'::__CP_UNINSTALL_ELEVATE_BEGIN__');$last=[Array]::IndexOf($lines,'::__CP_UNINSTALL_ELEVATE_END__');if($first-lt 0-or$last-le$first){throw 'Missing uninstall elevation orchestrator.'};$source=for($i=$first+1;$i-lt$last;$i++){if(-not$lines[$i].StartsWith('::',[StringComparison]::Ordinal)){throw 'Malformed uninstall elevation orchestrator.'};$lines[$i].Substring(2)};&([scriptblock]::Create($source-join[Environment]::NewLine))"
 set "ELEVATE_EXIT=%ERRORLEVEL%"
 del "%CP_SOURCE_TRANSPORT_PATH%" >nul 2>nul
 endlocal & set "ELEVATE_EXIT=%ELEVATE_EXIT%"
@@ -1292,7 +1292,7 @@ exit /b %ERRORLEVEL%
 
 :capture_native_msys2_artifacts
 set "NATIVE_ARTIFACT_PHASE=%~1"
-"%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop';$lines=[IO.File]::ReadAllLines($env:CP_UNINSTALL_SCRIPT);$first=[Array]::IndexOf($lines,'::__CP_NATIVE_ARTIFACTS_BEGIN__');$last=[Array]::IndexOf($lines,'::__CP_NATIVE_ARTIFACTS_END__');if($first-lt 0-or$last-le$first){throw 'Missing native artifact inventory block.'};$source=for($i=$first+1;$i-lt$last;$i++){if(-not$lines[$i].StartsWith('::',[StringComparison]::Ordinal)){throw 'Malformed native artifact inventory block.'};$lines[$i].Substring(2)};^&([scriptblock]::Create($source-join[Environment]::NewLine))"
+"%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop';$lines=[IO.File]::ReadAllLines($env:CP_UNINSTALL_SCRIPT);$first=[Array]::IndexOf($lines,'::__CP_NATIVE_ARTIFACTS_BEGIN__');$last=[Array]::IndexOf($lines,'::__CP_NATIVE_ARTIFACTS_END__');if($first-lt 0-or$last-le$first){throw 'Missing native artifact inventory block.'};$source=for($i=$first+1;$i-lt$last;$i++){if(-not$lines[$i].StartsWith('::',[StringComparison]::Ordinal)){throw 'Malformed native artifact inventory block.'};$lines[$i].Substring(2)};&([scriptblock]::Create($source-join[Environment]::NewLine))"
 set "NATIVE_ARTIFACT_EXIT=%ERRORLEVEL%"
 set "NATIVE_ARTIFACT_PHASE="
 exit /b %NATIVE_ARTIFACT_EXIT%

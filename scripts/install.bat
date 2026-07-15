@@ -868,7 +868,7 @@ set "CP_INSTALL_CWD=%ROOT%"
 set "CP_ELEVATE_UAC_TIMEOUT_SECONDS=%UAC_TIMEOUT_SECONDS%"
 set "CP_ELEVATE_CHILD_TIMEOUT_SECONDS=%INSTALL_CHILD_TIMEOUT_SECONDS%"
 setlocal DisableDelayedExpansion
-"%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop';$stream=[IO.File]::Open($env:CP_INSTALL_SCRIPT,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read);try{$reader=[IO.StreamReader]::new($stream,[Text.Encoding]::UTF8,$true,4096,$true);try{$text=$reader.ReadToEnd()}finally{$reader.Dispose()};$lines=[regex]::Split($text,'\r?\n');$first=[Array]::IndexOf($lines,'::__CP_ELEVATE_ORCHESTRATOR_BEGIN__');$last=[Array]::IndexOf($lines,'::__CP_ELEVATE_ORCHESTRATOR_END__');if($first-lt 0-or$last-le$first){throw 'Missing elevation orchestrator.'};$source=for($i=$first+1;$i-lt$last;$i++){if(-not$lines[$i].StartsWith('::',[StringComparison]::Ordinal)){throw 'Malformed elevation orchestrator.'};$lines[$i].Substring(2)};^&([scriptblock]::Create($source-join[Environment]::NewLine))}finally{$stream.Dispose()}"
+"%POWERSHELL_EXE%" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop';$stream=[IO.File]::Open($env:CP_INSTALL_SCRIPT,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read);try{$reader=[IO.StreamReader]::new($stream,[Text.Encoding]::UTF8,$true,4096,$true);try{$text=$reader.ReadToEnd()}finally{$reader.Dispose()};$lines=[regex]::Split($text,'\r?\n');$first=[Array]::IndexOf($lines,'::__CP_ELEVATE_ORCHESTRATOR_BEGIN__');$last=[Array]::IndexOf($lines,'::__CP_ELEVATE_ORCHESTRATOR_END__');if($first-lt 0-or$last-le$first){throw 'Missing elevation orchestrator.'};$source=for($i=$first+1;$i-lt$last;$i++){if(-not$lines[$i].StartsWith('::',[StringComparison]::Ordinal)){throw 'Malformed elevation orchestrator.'};$lines[$i].Substring(2)};&([scriptblock]::Create($source-join[Environment]::NewLine))}finally{$stream.Dispose()}"
 set "ELEVATE_EXIT=%ERRORLEVEL%"
 del "%ELEVATE_STARTED_FILE%" >nul 2>nul
 endlocal & set "ELEVATION_HANDLED=1" & set "ELEVATED_CHILD_EXIT=%ELEVATE_EXIT%" & exit /b 0
@@ -1284,7 +1284,7 @@ set "SEARCH_PS=%EXEC_TEMP%\cp_setup_search_%RANDOM%_%RANDOM%.ps1"
 >> "%SEARCH_PS%" echo $timedOut = $false
 >> "%SEARCH_PS%" echo while ^(-not $process.HasExited^) { if ^(-not $quiet^) { Write-Host -NoNewline ^($cr + $clear + $searching + ' ' + $frames[$i %% $frames.Count] + ' ' + $label^); [Console]::Out.Flush^(^) }; if ^($started.Elapsed.TotalSeconds -ge 120^) { $timedOut = $true; Stop-CpProcessTree $process $env:TASKKILL_EXE; break }; Start-Sleep -Milliseconds 100; $i++ }
 >> "%SEARCH_PS%" echo if ^($timedOut^) { $exitCode = 124 } elseif ^(-not $process.WaitForExit^(1000^)^) { Stop-CpProcessTree $process $env:TASKKILL_EXE; $exitCode=124 } else { $exitCode = $process.ExitCode }
->> "%SEARCH_PS%" echo $items = if ^(Test-Path -LiteralPath $output^) { @^(Get-Content -LiteralPath $output -ErrorAction SilentlyContinue^) } else { @^(^) }
+>> "%SEARCH_PS%" echo $items = @^(if ^(Test-Path -LiteralPath $output^) { Get-Content -LiteralPath $output -ErrorAction SilentlyContinue }^)
 >> "%SEARCH_PS%" echo Remove-Item -LiteralPath $wrapper -Force -ErrorAction SilentlyContinue
 >> "%SEARCH_PS%" echo if ^(-not ^(Test-Path -LiteralPath $output^)^) { [IO.File]::WriteAllText^($output,''^) }
 >> "%SEARCH_PS%" echo if (-not $quiet) {
@@ -1412,6 +1412,9 @@ if not exist "%ROOT%\.gitmodules" (
     exit /b 1
 )
 set "AC_LIBRARY_EXPECTED="
+set "AC_LIBRARY_ENTRY_MODE="
+set "AC_LIBRARY_ENTRY_TYPE="
+set "AC_LIBRARY_ENTRY_PATH="
 set "AC_GIT_OUTPUT=%EXEC_TEMP%\cp_setup_acl_git_%RANDOM%_%RANDOM%.txt"
 set "AC_GIT_ERROR=%EXEC_TEMP%\cp_setup_acl_git_%RANDOM%_%RANDOM%.err"
 set "SILENT_COMMAND="%FOUND_GIT_PATH%" -c "safe.directory=%ROOT%" -c "core.hooksPath=NUL" -C "%ROOT%" ls-tree HEAD -- libraries/ac-library"
@@ -1426,9 +1429,26 @@ if not "!AC_GIT_EXIT!"=="0" (
     set "AC_LIBRARY_ERROR=Git could not inspect the repository ac-library entry."
     exit /b 1
 )
-for /F "tokens=3" %%P in ("%AC_GIT_OUTPUT%") do if not defined AC_LIBRARY_EXPECTED set "AC_LIBRARY_EXPECTED=%%P"
+for /F "usebackq tokens=1,2,3,*" %%A in ("%AC_GIT_OUTPUT%") do if not defined AC_LIBRARY_EXPECTED (
+    set "AC_LIBRARY_ENTRY_MODE=%%A"
+    set "AC_LIBRARY_ENTRY_TYPE=%%B"
+    set "AC_LIBRARY_EXPECTED=%%C"
+    set "AC_LIBRARY_ENTRY_PATH=%%D"
+)
 del "%AC_GIT_OUTPUT%" >nul 2>nul
 if not defined AC_LIBRARY_EXPECTED (
+    set "AC_LIBRARY_ERROR=The repository does not record an ac-library gitlink."
+    exit /b 1
+)
+if not "!AC_LIBRARY_ENTRY_MODE!"=="160000" (
+    set "AC_LIBRARY_ERROR=The repository does not record an ac-library gitlink."
+    exit /b 1
+)
+if /i not "!AC_LIBRARY_ENTRY_TYPE!"=="commit" (
+    set "AC_LIBRARY_ERROR=The repository does not record an ac-library gitlink."
+    exit /b 1
+)
+if /i not "!AC_LIBRARY_ENTRY_PATH!"=="libraries/ac-library" (
     set "AC_LIBRARY_ERROR=The repository does not record an ac-library gitlink."
     exit /b 1
 )

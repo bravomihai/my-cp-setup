@@ -39,6 +39,53 @@ class BatchStructureTests(unittest.TestCase):
                 self.assertNotRegex(text, r"(?i)Receive-Job\s+-Wait\b")
                 self.assertNotIn("Get-CimInstance", text)
 
+    def test_direct_powershell_launchers_do_not_escape_call_operator(self) -> None:
+        powershell = Path(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
+        for path in BATCH_SCRIPTS:
+            with self.subTest(script=path.name):
+                direct_launchers = [
+                    line
+                    for line in path.read_text(encoding="utf-8").splitlines()
+                    if "([scriptblock]::Create" in line
+                    and not line.lstrip().startswith("::")
+                ]
+                self.assertTrue(
+                    direct_launchers,
+                    f"no direct PowerShell launcher found in {path.name}",
+                )
+                for line in direct_launchers:
+                    self.assertIn(
+                        ";&([scriptblock]::Create",
+                        line,
+                        "CMD preserves a caret inside a quoted -Command argument",
+                    )
+                    self.assertNotIn(";^&([scriptblock]::Create", line)
+                    payload = re.search(r' -Command "(.*)"$', line)
+                    self.assertIsNotNone(payload, "malformed direct -Command launcher")
+                    parsed = subprocess.run(
+                        [
+                            str(powershell),
+                            "-NoLogo",
+                            "-NoProfile",
+                            "-NonInteractive",
+                            "-Command",
+                            "$s=[Console]::In.ReadToEnd();$t=$null;$e=$null;"
+                            "[Management.Automation.Language.Parser]::ParseInput("
+                            "$s,[ref]$t,[ref]$e)|Out-Null;"
+                            "if($e.Count){$e|ForEach-Object ToString;exit 1}",
+                        ],
+                        input=payload.group(1),
+                        text=True,
+                        capture_output=True,
+                        timeout=15,
+                        check=False,
+                    )
+                    self.assertEqual(
+                        0,
+                        parsed.returncode,
+                        parsed.stdout + parsed.stderr,
+                    )
+
     def test_ansi_is_initialized_before_early_failures(self) -> None:
         for path in BATCH_SCRIPTS:
             with self.subTest(script=path.name):
