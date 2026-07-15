@@ -41,27 +41,9 @@ Show the exact resolved executable paths during a read-only check:
 scripts\install.bat --check --verbose
 ```
 
-Write the complete installation transcript to a chosen file:
+The scripts use only their own prompts and UAC flow; external package operations are silent and non-interactive. Actual installation and uninstallation request administrator rights once when needed, so approve the UAC prompt or enter valid administrator credentials. The read-only `--check` modes do not elevate. Existing tools are accepted when they satisfy the minimum versions: Python 3.10, Neovim 0.11, and both the Java compiler and runtime from JDK 21. The setup also ensures Node.js/npm, Ruff, the C++ toolchain, Pyright, JDT LS, Google Java Format, and clangd. Windows Package Manager (`winget`) is needed only when a missing or outdated winget-managed component must be installed or upgraded.
 
-```bat
-scripts\install.bat --log C:\path\to\install.log
-```
-
-For automation, start from an already elevated terminal:
-
-```bat
-scripts\install.bat --non-interactive
-```
-
-This mode does not open a UAC prompt and fails when the terminal is not already elevated.
-
-The scripts use only their own prompts and UAC flow; external package operations are silent and non-interactive. A normal installation or uninstallation requests administrator rights once when needed. Machine components and protected ownership state use the elevated token, while profile, User registry, Neovim data, and repository operations use the invoking user's standard token. This remains true if UAC credentials belong to a different administrator. Setup state is protected in the machine registry and kept separately for the invoking account's SID. The read-only `--check` modes do not elevate.
-
-The elevated child exits automatically. The original window reports the final statuses and returns the child's real exit code; UAC cancellation, failure, and timeout are nonzero. A complete transcript is retained as `%LOCALAPPDATA%\Temp\cp_setup_install.log` by default, or at the path selected with `--log`. Long-running child processes are terminated as a process tree when their finite watchdog expires.
-
-Existing protected tools are accepted when Python is 3.10 or newer, Neovim is 0.11 or newer, Node.js reports an LTS release, npm runs successfully, and both the Java compiler and runtime are from JDK 21 or newer. Node.js and npm are required by Pyright and Neovim language tooling. Candidate tool executables used by privileged operations must come from protected machine locations; setup installs or selects a protected copy instead of trusting one from a user-writable directory. Across elevation, the repository batch source stays locked against replacement while its final path, content hash, and bytes are read from the same handle. Only a newly created copy in the protected runtime is executed by the elevated child; the original path is not reopened. The setup also ensures Ruff, the C++ toolchain, Pyright, JDT LS, Google Java Format, and clangd. Windows Package Manager (`winget`) is required when a missing or outdated winget-managed component must be installed or upgraded, and when uninstalling or verifying a setup-owned winget package. Those packages are managed in machine scope, so the administrator account used for UAC must have a working WinGet registration when package work is required.
-
-Neovim plugin and language-tool phases use their own shorter deadlines; Mason reports the current language tool as `N/4` and stops immediately on an error. Rerunning the installer can repair a stale Mason launcher left by an interrupted older installation.
+Neovim bootstrap reports the current language tool as `N/4`, stops immediately when Mason reports an error, and has a hard timeout for both plugin and language-tool phases. A failed phase prints its log path instead of leaving the installer spinner running indefinitely; rerunning the installer can repair a stale Mason launcher left by an interrupted older installation.
 
 The setup adds to User PATH `scripts` plus only the directories of the exact Git, Neovim, Node.js/npm, JDK, C++, Python, and Ruff executables selected by the installer. Rerunning it removes obsolete setup-owned alternative JDK or MSYS2 toolchain directories while preserving unrelated and pre-existing PATH entries.
 
@@ -111,23 +93,13 @@ Remove all setup-managed components and configuration, then choose whether to re
 scripts\uninstall.bat --all
 ```
 
-For automation, run from an already elevated terminal and remove all managed components and configuration while keeping the repository:
-
-```bat
-scripts\uninstall.bat --non-interactive
-```
-
-Use `--log C:\path\to\uninstall.log` to choose the complete uninstall transcript destination. Otherwise it is retained as `%LOCALAPPDATA%\Temp\cp_setup_uninstall.log`. Neither script waits for a final key press.
-
 Preview uninstall state without changing anything:
 
 ```bat
 scripts\uninstall.bat --check
 ```
 
-The installer records, in protected per-SID state, immutable pre-install snapshots plus the environment values, PATH entries, packages, Neovim data, and temporary artifacts it actually creates. Interrupted installs can be retried without reclassifying setup-created data as pre-existing. The uninstaller keeps pre-existing components and restores configuration only when the user has not changed the setup-written value afterward. It never deletes the tracked `nvim` configuration; generated `nvim-data` is removed in full only when it did not exist before installation, otherwise only the complete before/after set of setup-added Mason packages and the setup-created JDT LS workspace are removed. Setup-created cache and temporary paths are removed from their recorded strict allowlist; diagnostic transcripts are retained intentionally.
-
-An `UNINSTALLED` status is printed only after the component is confirmed absent, and its ownership state is cleared only after that verification. If removal or verification fails, ownership is retained so a later run can retry safely.
+The installer records the environment values, PATH entries, packages, and Neovim data it actually creates. The uninstaller keeps pre-existing components and restores configuration only when the user has not changed the setup-written value afterward. It never deletes the tracked `nvim` configuration; generated `nvim-data` is removed in full only when it did not exist before installation, otherwise only exact setup-added Mason packages and the setup-created JDT LS workspace are removed.
 
 Run the repository regression test with:
 
@@ -135,7 +107,7 @@ Run the repository regression test with:
 python -m unittest discover -s tests
 ```
 
-The suite covers expansion and runner behavior plus installer/uninstaller contracts for elevation, immutable retry state, worktree integrity, timeouts, process cleanup, silent package operations, user-owned configuration, Mason dependencies, and temporary artifacts. A clean-snapshot VM run is still required for a release-level E2E check of UAC and package installation.
+The suite covers the runner, submission expansion, and project-specific Neovim behavior. Installation and UAC still require a real Windows test.
 
 ## Project Layout
 
@@ -150,7 +122,7 @@ my-cp-setup
 |-- nvim/                    Neovim configuration
 |-- scripts/                 Installer, uninstaller, runner, expander, CMD macros
 |-- template/                C++, Java, and Python starter files
-|-- tests/                   Runner and setup regression tests
+|-- tests/                   Runner, expansion, and Neovim regression tests
 |-- workspace/               Only placeholders tracked; local contents ignored
 |-- AGENTS.md                Guidance for coding agents
 `-- README.md
