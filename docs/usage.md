@@ -96,7 +96,7 @@ Generation is atomic: a failed expansion leaves any previous submit file unchang
 
 - **C++:** inserts the helper, defines `DISABLE_DEBUG` so `out(...)` is compiled out, then uses the AtCoder expander to inline `atcoder` headers.
 - **Java:** hoists and deduplicates imports, inserts `Cp.java`, removes package/local-helper declarations, changes `DEBUG` to `false`, and renames the top-level public source class and references to its name to `Main`.
-- **Python:** preserves the shebang, encoding cookie, module docstring, and `from __future__` imports before inserting `cp.py`; it removes the local helper import and changes `DEBUG` to `False`.
+- **Python:** preserves the shebang, encoding cookie, module docstring, and `from __future__` imports before inserting `cp.py`; the inlined helper keeps its runtime state isolated from the solution's global names, the local helper import is removed, and `DEBUG` is changed to `False`.
 
 Do not submit the original file when it depends on `my_libraries`; submit the generated file instead.
 
@@ -120,7 +120,7 @@ For Python, helper imports must be top-level, unaliased `from my_libraries.cp im
 | `<leader>E` | Save and expand as above, then open `submit.<ext>` |
 | `<leader>d` | Enable or disable diagnostics for the current buffer |
 
-Other custom editing mappings:
+Other useful editing mappings are listed below. `jj` and the buffer-navigation mappings are project-specific; the LSP mappings are supplied by LazyVim and are available only when an attached language server supports the corresponding action:
 
 | Mapping | Action |
 | --- | --- |
@@ -134,7 +134,7 @@ Other custom editing mappings:
 | `<leader><leader>` | Switch to the previously used buffer |
 | `<leader>n` / `<leader>p` | Next / previous buffer |
 
-Saving supported source files formats them first when the formatter is available: Ruff for Python, Google Java Format for Java, and the language server for C/C++. `<leader>cf` triggers formatting manually. Completion popups are intentionally disabled, while LSP navigation and code actions remain available. The configuration also keeps persistent undo, reserves the diagnostic sign column, uses an 8-line scroll offset, and disables soft wrapping for C, C++, Java, and Python buffers. Leaving a buffer autosaves only C++, Java, Python, `input.txt`, and `expected.txt` files.
+LazyVim manages format-on-save and its capability-aware LSP navigation/action mappings. This project defines `<leader>cf` to run the same formatting path manually: Conform uses Ruff for Python and Google Java Format for Java, while C/C++ uses the language server fallback. Completion popups are intentionally disabled, while LSP navigation and code actions remain available. The configuration also keeps persistent undo, reserves the diagnostic sign column, uses an 8-line scroll offset, and disables soft wrapping for C, C++, Java, and Python buffers. Leaving a buffer autosaves only C++, Java, Python, `input.txt`, and `expected.txt` files.
 
 Saving a Python or Java buffer also runs a syntax check without executing the solution. Python uses Ruff in syntax-only mode, while Java uses `javac` with the local helper library and writes generated classes to a unique temporary cache directory that is cleaned after each check. Errors appear as inline diagnostics on the relevant line and can be hidden or restored with `<leader>d`. Pyright and JDT LS provide hover, definition, reference, rename, and code-action support for Python and Java.
 
@@ -212,3 +212,5 @@ scripts\install.bat --check --verbose
 The check expands and compiles temporary copies of all templates without running them, changing the clipboard, or writing generated files into the repository. See the [repository README](../README.md#maintenance) for installation and cleanup behavior.
 
 During a normal installation, the Neovim language-tool spinner shows Mason progress from `0/4` through `4/4`. Registry and package failures stop immediately, while a non-responsive Neovim process is terminated at the phase deadline and the installer prints the relevant log path.
+
+Installer and uninstaller children close automatically. Their original window returns the real exit code and retains a complete default transcript in `%LOCALAPPDATA%\Temp`; use each script's `--log <path>` option when a separate diagnostic file is preferable.

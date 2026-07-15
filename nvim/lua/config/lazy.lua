@@ -1,4 +1,8 @@
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
+local setup_lockfile = vim.env.CP_SETUP_LAZY_LOCKFILE
+if setup_lockfile == "" then
+  setup_lockfile = nil
+end
 if not (vim.uv or vim.loop).fs_stat(lazypath) then
   local lazyrepo = "https://github.com/folke/lazy.nvim.git"
   local out = vim.fn.system({ "git", "clone", "--filter=blob:none", "--branch=stable", lazyrepo, lazypath })
@@ -8,13 +12,16 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
       { out, "WarningMsg" },
       { "\nPress any key to exit..." },
     }, true, {})
-    vim.fn.getchar()
+    if vim.env.CP_MASON_BOOTSTRAP ~= "1" then
+      vim.fn.getchar()
+    end
     os.exit(1)
   end
 end
 vim.opt.rtp:prepend(lazypath)
 
 require("lazy").setup({
+  lockfile = setup_lockfile or (vim.fn.stdpath("config") .. "/lazy-lock.json"),
   spec = {
     -- add LazyVim and import its plugins
     { "LazyVim/LazyVim", import = "lazyvim.plugins" },

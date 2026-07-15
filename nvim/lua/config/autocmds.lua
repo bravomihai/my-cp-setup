@@ -6,21 +6,6 @@
 --
 -- Or remove existing autocmds by their group name (which is prefixed with `lazyvim_` for the defaults)
 -- e.g. vim.api.nvim_del_augroup_by_name("lazyvim_wrap_spell")
--- auto format
-vim.api.nvim_create_autocmd("BufWritePre", {
-  pattern = { "*.cpp", "*.h", "*.hpp", "*.c", "*.py", "*.java" },
-  callback = function()
-    if vim.bo.filetype == "python" or vim.bo.filetype == "java" then
-      local ok, conform = pcall(require, "conform")
-      if ok then
-        conform.format({ async = false })
-      end
-    else
-      vim.lsp.buf.format({ async = false })
-    end
-  end,
-})
-
 vim.api.nvim_create_autocmd("BufLeave", {
   pattern = { "*.cpp", "*.java", "*.py", "input.txt", "expected.txt" },
   callback = function(event)
@@ -36,6 +21,22 @@ vim.api.nvim_create_autocmd("FileType", {
   pattern = { "c", "cpp", "java", "python" },
   callback = function()
     vim.wo.wrap = false
+  end,
+})
+
+-- LazyVim loads LSP support on the first file event. Replay that buffer's
+-- FileType event after the lazy handler finishes so Neovim's capability-aware
+-- LSP mappings and client startup also apply to the first source file opened.
+vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
+  pattern = { "*.c", "*.cpp", "*.h", "*.hpp", "*.java", "*.py" },
+  callback = function(event)
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(event.buf) or vim.b[event.buf].cp_lsp_filetype_replayed then
+        return
+      end
+      vim.b[event.buf].cp_lsp_filetype_replayed = true
+      vim.api.nvim_exec_autocmds("FileType", { buffer = event.buf, modeline = false })
+    end)
   end,
 })
 

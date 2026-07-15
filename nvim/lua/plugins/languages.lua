@@ -34,6 +34,9 @@ return {
     opts = {
       servers = {
         pyright = {
+          root_dir = function(_, on_dir)
+            on_dir(setup_root)
+          end,
           settings = {
             pyright = {
               disableTaggedHints = true,

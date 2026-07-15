@@ -36,13 +36,7 @@ return {
     },
   },
 
-  -- autopairs
-  {
-    "windwp/nvim-autopairs",
-    config = true,
-  },
-
-  -- treesitter (adaugi C/C++)
+  -- treesitter (C/C++)
   {
     "nvim-treesitter/nvim-treesitter",
     opts = function(_, opts)
@@ -59,6 +53,9 @@ return {
     opts = {
       servers = {
         clangd = {
+          root_dir = function(_, on_dir)
+            on_dir(require("config.cp").setup_root())
+          end,
           cmd = {
             "clangd",
             "--query-driver=" .. gpp,
