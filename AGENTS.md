@@ -18,7 +18,7 @@
 - Keep runner-built C++ executables and Java class output in temporary directories, run Python with bytecode generation disabled, and clean temporary expansion files on both success and failure.
 - Submission writes must remain atomic. Failed expansion must not replace an existing `submit.*`, and verification/setup checks must not change the clipboard or repository workspace.
 - Generated submissions must disable local diagnostics. Java sources must use qualified `Cp.member(...)` access; keep the explicit rejection of static imports from `my_libraries.Cp`.
-- Keep the inlined Python helper state closure-isolated from solution globals, and retain the regression test that shadows debug flags, modules, builtins, helper internals, and public helper names.
+- Keep the inlined Python helper state closure-isolated from solution globals, including when solution code shadows debug flags, modules, builtins, helper internals, or public helper names.
 - Let LazyVim own capability-aware LSP navigation/action mappings and format-on-save. Keep the project's single `<leader>cf` manual-format mapping, but do not add unconditional duplicates, a second `BufWritePre` formatter, or a second autopairs implementation alongside `mini.pairs`.
 
 ## Install And Uninstall Safety

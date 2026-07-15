@@ -101,14 +101,6 @@ scripts\uninstall.bat --check
 
 The installer records the environment values, PATH entries, packages, and Neovim data it actually creates. The uninstaller keeps pre-existing components and restores configuration only when the user has not changed the setup-written value afterward. It never deletes the tracked `nvim` configuration; generated `nvim-data` is removed in full only when it did not exist before installation, otherwise only exact setup-added Mason packages and the setup-created JDT LS workspace are removed.
 
-Run the repository regression test with:
-
-```bat
-python -m unittest discover -s tests
-```
-
-The suite covers the runner, submission expansion, and project-specific Neovim behavior. Installation and UAC still require a real Windows test.
-
 ## Project Layout
 
 ```text
@@ -122,7 +114,6 @@ my-cp-setup
 |-- nvim/                    Neovim configuration
 |-- scripts/                 Installer, uninstaller, runner, expander, CMD macros
 |-- template/                C++, Java, and Python starter files
-|-- tests/                   Runner, expansion, and Neovim regression tests
 |-- workspace/               Only placeholders tracked; local contents ignored
 |-- AGENTS.md                Guidance for coding agents
 `-- README.md
